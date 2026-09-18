@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+const base = process.env.PROD_SMOKE_BASE?.replace(/\/$/, "");
+
+test("prod smoke: GET /health", { skip: !base }, async () => {
+  const res = await fetch(`${base}/health`);
+  assert.equal(res.ok, true);
+  const body = (await res.json()) as { ok?: boolean };
+  assert.equal(body.ok, true);
+});
+
+test("prod smoke: GET /api/ops/health", { skip: !base }, async () => {
+  const res = await fetch(`${base}/api/ops/health`);
+  assert.equal(res.ok, true);
+  const body = (await res.json()) as {
+    ok?: boolean;
+    openCriticalAlerts?: number;
+  };
+  assert.equal(typeof body.ok, "boolean");
+  assert.equal(typeof body.openCriticalAlerts, "number");
+});
+
+test("prod smoke: GET /api/ops/metrics (OPS_TOKEN o AGENCY_API_KEY)", {
+  skip: !base || !(process.env.OPS_TOKEN || process.env.AGENCY_API_KEY),
+}, async () => {
+  const headers = new Headers();
+  if (process.env.OPS_TOKEN) headers.set("x-ops-token", process.env.OPS_TOKEN);
+  else headers.set("x-api-key", process.env.AGENCY_API_KEY ?? "");
+  const res = await fetch(`${base}/api/ops/metrics`, { headers });
+  assert.equal(res.ok, true);
+});

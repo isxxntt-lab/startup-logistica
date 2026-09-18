@@ -1,5 +1,6 @@
 const api = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 const ridInput = document.querySelector("#rid") as HTMLInputElement;
+const apiKeyInput = document.querySelector("#apiKey") as HTMLInputElement;
 const paradasEl = document.querySelector("#paradas") as HTMLUListElement;
 const logEl = document.querySelector("#log") as HTMLDivElement;
 
@@ -47,8 +48,17 @@ document.querySelector("#load")?.addEventListener("click", async () => {
   }
 
   ws?.close();
-  const wsUrl = api.replace("http", "ws") + `/ws/repartidor?id=${id}`;
+  const wsUrl = api.replace("http", "ws") + `/ws/repartidor?id=${encodeURIComponent(id)}`;
   ws = new WebSocket(wsUrl);
+  ws.onopen = () => {
+    ws?.send(
+      JSON.stringify({
+        tipo: "auth",
+        apiKey: apiKeyInput.value,
+        id,
+      }),
+    );
+  };
   ws.onmessage = (ev) => log(String(ev.data));
 });
 

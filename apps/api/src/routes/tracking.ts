@@ -15,6 +15,7 @@ import { pool } from "../db.js";
 import { peekAgenciaId, verificarTokenCliente } from "../jwt.js";
 import { redisPub } from "../redis.js";
 import { gateFromJwtError, gateFromParada } from "../tracking-gate.js";
+import { TRACKING_POSITION_RATE_LIMIT, trackingPositionRateLimitKey } from "../rate-limit-config.js";
 
 const tokenBodySchema = z.object({
   token: z.string().min(1),
@@ -185,7 +186,18 @@ export async function trackingRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/api/tracking/position", async (request, reply) => {
+  app.get("/api/tracking/position", {
+    config: {
+      rateLimit: {
+        ...TRACKING_POSITION_RATE_LIMIT,
+        keyGenerator: (request) =>
+          trackingPositionRateLimitKey({
+            ip: request.ip,
+            token: tokenDesdeRequest(request),
+          }),
+      },
+    },
+  }, async (request, reply) => {
     const token = tokenDesdeRequest(request);
     const auth = await autenticarTracking(token);
     if (!auth.ok) return replyTrackingAuth(reply, token, auth.failure);
