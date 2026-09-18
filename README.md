@@ -254,4 +254,4 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ./scripts/prod-healthcheck.sh https://api.rutacerca.es https://seguimiento.rutacerca.es
 ```
 
-Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados. `/ws/repartidor` exige API key de agencia (header o mensaje `auth`).
+Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados con `ACME_EMAIL`. PostGIS/Redis solo en red `internal`; la API está en `edge`+`internal`. `/ws/repartidor` exige API key de agencia (header o mensaje `auth`).

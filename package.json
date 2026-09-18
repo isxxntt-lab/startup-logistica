@@ -12,7 +12,8 @@
     "dev:dashboard": "pnpm --filter @startup-logistica/web-dashboard dev",
     "demo:geocerca": "pnpm --filter @startup-logistica/api demo:geocerca",
     "ops:checks": "pnpm --filter @startup-logistica/api ops:checks",
-    "test": "pnpm -r --if-present run test",
+    "test": "pnpm -r --if-present run test && node --test scripts/prod-compose.test.mjs",
+    "test:prod-compose": "node --test scripts/prod-compose.test.mjs",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck"
   },
