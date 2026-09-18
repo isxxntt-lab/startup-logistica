@@ -12,11 +12,16 @@ COPY apps/web-cliente/package.json apps/web-cliente/
 COPY apps/web-repartidor/package.json apps/web-repartidor/
 COPY apps/web-dashboard/package.json apps/web-dashboard/
 
-RUN pnpm install --frozen-lockfile
-
+# Copy sources BEFORE pnpm install. Installing first creates package-local
+# node_modules (often a symlink into .pnpm); a later COPY of the host tree
+# then fails with "cannot copy to non-directory" when the context still has
+# Windows/pnpm node_modules junctions.
 COPY packages/shared packages/shared
 COPY apps/api apps/api
 COPY infra/postgres infra/postgres
+
+RUN rm -rf packages/shared/node_modules apps/*/node_modules \
+    && pnpm install --frozen-lockfile
 
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid 10001 --home-dir /app --no-create-home --shell /usr/sbin/nologin app \

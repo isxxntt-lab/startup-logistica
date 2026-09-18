@@ -1,4 +1,5 @@
 -- Seed de demo (Madrid centro). El hash corresponde a la api key en texto plano: demo-api-key
+-- Idempotente: ON CONFLICT / WHERE EXISTS para reaplicar o para init parcial.
 INSERT INTO agencias (id, nombre, cif, plan, api_key_hash, nombre_saas, telefono_soporte, email_soporte)
 VALUES (
   '11111111-1111-1111-1111-111111111111',
@@ -9,7 +10,8 @@ VALUES (
   'RutaCerca',
   '+34911222333',
   'soporte@rutacerca.es'
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO repartidores (id, agencia_id, codigo, nombre, telefono, vehiculo, matricula, activo)
 VALUES (
@@ -21,7 +23,8 @@ VALUES (
   'furgoneta',
   '1234-LCS',
   true
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO puntos_recogida (id, agencia_id, nombre, ubicacion, horario, capacidad_diaria)
 VALUES (
@@ -31,7 +34,8 @@ VALUES (
   ST_SetSRID(ST_MakePoint(-3.7038, 40.4168), 4326)::geography,
   '{"lunes_viernes": "09:00-20:00"}'::jsonb,
   80
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO rutas (id, agencia_id, repartidor_id, fecha, estado, orden_paradas)
 VALUES (
@@ -41,7 +45,8 @@ VALUES (
   CURRENT_DATE,
   'en_curso',
   '["55555555-5555-5555-5555-555555555551","55555555-5555-5555-5555-555555555552","55555555-5555-5555-5555-555555555553","55555555-5555-5555-5555-555555555554"]'::jsonb
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO paradas (
   id, ruta_id, orden, referencia_pedido, cliente_nombre, receptor_nombre,
@@ -79,11 +84,13 @@ INSERT INTO paradas (
   '+34611111114', 'Templo de Debod, Madrid',
   ST_SetSRID(ST_MakePoint(-3.7178, 40.4240), 4326)::geography, 150, 'pendiente',
   false, NULL, NULL
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO delivery_attempts (
   parada_id, attempt_number, started_at, completed_at, status, failure_avoided, avoidance_channel
-) VALUES (
+)
+SELECT
   '55555555-5555-5555-5555-555555555551',
   1,
   now() - interval '55 minutes',
@@ -91,4 +98,11 @@ INSERT INTO delivery_attempts (
   'delivered',
   true,
   'whatsapp'
+WHERE EXISTS (
+  SELECT 1 FROM paradas WHERE id = '55555555-5555-5555-5555-555555555551'
+)
+AND NOT EXISTS (
+  SELECT 1 FROM delivery_attempts
+  WHERE parada_id = '55555555-5555-5555-5555-555555555551'
+    AND attempt_number = 1
 );

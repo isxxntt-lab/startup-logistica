@@ -51,11 +51,11 @@ services:
     expose:
       - "8080"
     tmpfs:
-      - /var/cache/nginx
-      - /var/run
-      - /var/log/nginx
-      - /var/lib/nginx
-      - /tmp
+      - /var/cache/nginx:uid=101,gid=101,mode=1777
+      - /var/run:uid=101,gid=101,mode=1777
+      - /var/log/nginx:uid=101,gid=101,mode=1777
+      - /var/lib/nginx:uid=101,gid=101,mode=1777
+      - /tmp:uid=101,gid=101,mode=1777
     read_only: true
     security_opt:
       - no-new-privileges:true

@@ -1,10 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
+  ENLACE_YA_NO_VALIDO,
+  TRACKING_ACTIONS,
+  TRACKING_GONE_ERROR,
   canConfirmPresence,
   canReschedule,
   type EstadoParada,
   repartidorChannel,
+  trackingApiPath,
 } from "@startup-logistica/shared";
 import {
   logOps,
@@ -59,7 +63,7 @@ function sendGone(
   reply: { code: (status: number) => { send: (body: unknown) => unknown } },
   reason: "expired" | "used",
 ) {
-  return reply.code(410).send({ error: "gone", reason });
+  return reply.code(410).send({ error: TRACKING_GONE_ERROR, reason });
 }
 
 async function logTrackingAuthFailure(
@@ -75,6 +79,7 @@ async function logTrackingAuthFailure(
     actor: "api",
     payload: {
       reason: failure.kind === "gone" ? failure.reason : "invalid",
+      code: failure.kind === "gone" ? ENLACE_YA_NO_VALIDO : undefined,
       statusCode: failure.kind === "gone" ? 410 : failure.status,
       tokenPrefix,
       tokenHash,
@@ -172,7 +177,7 @@ async function publicarRespuestaCliente(
 }
 
 export async function trackingRoutes(app: FastifyInstance) {
-  app.get("/api/tracking/session", async (request, reply) => {
+  app.get(trackingApiPath(TRACKING_ACTIONS.session), async (request, reply) => {
     const token = tokenDesdeRequest(request);
     const auth = await autenticarTracking(token);
     if (!auth.ok) return replyTrackingAuth(reply, token, auth.failure);
@@ -186,7 +191,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/api/tracking/position", {
+  app.get(trackingApiPath(TRACKING_ACTIONS.position), {
     config: {
       rateLimit: {
         ...TRACKING_POSITION_RATE_LIMIT,
@@ -212,7 +217,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/api/tracking/confirm-presence", async (request, reply) => {
+  app.post(trackingApiPath(TRACKING_ACTIONS.confirmPresence), async (request, reply) => {
     const parsed = tokenBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.flatten() });
@@ -254,7 +259,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     return { ok: true, status: "will_be_there" as const };
   });
 
-  app.post("/api/tracking/reschedule", async (request, reply) => {
+  app.post(trackingApiPath(TRACKING_ACTIONS.reschedule), async (request, reply) => {
     const parsed = tokenBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.flatten() });

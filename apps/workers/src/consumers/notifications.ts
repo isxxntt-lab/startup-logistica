@@ -1,5 +1,6 @@
 import {
   assertTransicion,
+  notificationDedupeKey,
   plantillaParaMotivo,
   renderPlantilla,
   repartidorChannel,
@@ -231,7 +232,11 @@ async function recordSkipJob(opts: {
 }): Promise<void> {
   const orderId = String(opts.parada.referencia_pedido ?? opts.parada.id);
   const correlationId = currentCorrelationId() ?? crypto.randomUUID();
-  const dedupeKey = `${opts.parada.id}:${opts.channel}:${opts.event.motivo}`;
+  const dedupeKey = notificationDedupeKey(
+    String(opts.parada.id),
+    opts.channel,
+    opts.event.motivo,
+  );
   const existing = await loadJobByDedupe(dedupeKey);
   if (existing) return;
   const jobId = await insertJob({
@@ -275,7 +280,11 @@ async function recordDeferredJob(opts: {
 }): Promise<void> {
   const orderId = String(opts.parada.referencia_pedido ?? opts.parada.id);
   const correlationId = currentCorrelationId() ?? crypto.randomUUID();
-  const dedupeKey = `${opts.parada.id}:${opts.channel}:${opts.event.motivo}`;
+  const dedupeKey = notificationDedupeKey(
+    String(opts.parada.id),
+    opts.channel,
+    opts.event.motivo,
+  );
   const payload = {
     ...opts.payloadBase,
     channel: opts.channel,
@@ -356,7 +365,11 @@ async function sendAndPersist(opts: {
   const orderId = String(opts.parada.referencia_pedido ?? opts.parada.id);
   const nextChannel = nextNotificationChannel(opts.channel);
   const correlationId = currentCorrelationId() ?? crypto.randomUUID();
-  const dedupeKey = `${opts.parada.id}:${opts.channel}:${opts.event.motivo}`;
+  const dedupeKey = notificationDedupeKey(
+    String(opts.parada.id),
+    opts.channel,
+    opts.event.motivo,
+  );
 
   let jobId = opts.resumeJobId;
   if (!jobId) {

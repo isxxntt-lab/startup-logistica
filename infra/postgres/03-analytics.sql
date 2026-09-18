@@ -90,6 +90,8 @@ WHERE id = '55555555-5555-5555-5555-555555555552';
 UPDATE paradas SET referencia_pedido = 'ORD-ESPANA-003', receptor_nombre = 'Cliente 3'
 WHERE id = '55555555-5555-5555-5555-555555555553';
 
+-- Demo seed: attempt de ORD-ALCALA-001. No insertar si la parada no existe
+-- (compose de prod no monta 02-seed.sql; un INSERT a ciegas rompe el FK).
 INSERT INTO delivery_attempts (
   parada_id, attempt_number, started_at, completed_at, status, failure_avoided, avoidance_channel
 )
@@ -101,7 +103,10 @@ SELECT
   'delivered',
   true,
   'whatsapp'
-WHERE NOT EXISTS (
+WHERE EXISTS (
+  SELECT 1 FROM paradas WHERE id = '55555555-5555-5555-5555-555555555551'
+)
+AND NOT EXISTS (
   SELECT 1 FROM delivery_attempts
   WHERE parada_id = '55555555-5555-5555-5555-555555555551'
 );

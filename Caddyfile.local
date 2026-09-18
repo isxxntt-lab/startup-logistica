@@ -1,0 +1,34 @@
+# HTTPS local con CA interna de Caddy. NO usar en el VPS.
+# Sitios: localhost (SPA) y api.localhost (API). Los navegadores modernos
+# resuelven *.localhost a 127.0.0.1. Confía el CA de Caddy una vez
+# (ver deploy/LOCAL_HTTPS.md). Let's Encrypt / ACME no intervienen.
+
+{
+	local_certs
+}
+
+localhost {
+	tls internal
+	encode gzip
+	reverse_proxy web:8080
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+api.localhost {
+	tls internal
+	encode gzip
+	reverse_proxy api:3000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

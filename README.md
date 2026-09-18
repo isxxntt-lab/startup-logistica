@@ -261,8 +261,12 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 | `apps/workers/Dockerfile` | Consumers Redis |
 | `apps/web-cliente/Dockerfile` | Build Vite + nginx unprivileged (`USER 101`, :8080, `COPY --chown=101:101` del `dist`) |
 | `docker-compose.prod.yml` | PostGIS + Redis internos, Caddy en 80/443 |
-| `Caddyfile` | TLS y reverse proxy |
+| `docker-compose.prod.local.yml` | Overlay local: `Caddyfile.local` + `localhost` / `api.localhost` |
+| `Caddyfile` | TLS ACME de producción |
+| `Caddyfile.local` | `tls internal` para HTTPS local (no usar en el VPS) |
 | `.env.production.example` | Plantilla de secretos (no commitear valores reales) |
+| `.env.production.local.example` | Dummy local; copiar a `.env.production.local` (gitignored) |
+| `deploy/LOCAL_HTTPS.md` | Smoke HTTPS local sin Let's Encrypt |
 | `deploy/SECURITY_CHECKLIST.md` | Checklist de endurecimiento |
 | `deploy/MERGE_ORDER.md` | Orden #4→#11, #9 rebaseado sobre #11, qué verifica Grey, VPS ≠ código |
 | `deploy/DEPLOY_PLAN_MANANA.md` | Pasos de go-live |
@@ -287,3 +291,5 @@ STAGING_BASE=http://localhost:3000 STAGING_SMOKE=1 AGENCY_API_KEY=demo-api-key \
 ```
 
 Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados con `ACME_EMAIL`. PostGIS/Redis solo en red `internal`; la API está en `edge`+`internal`. `/ws/repartidor` y HTTP `/repartidor/*` exigen API key de agencia (`x-api-key`; el WS también acepta mensaje `auth`).
+
+HTTPS **en local** (sin ACME, `tls internal`): `deploy/LOCAL_HTTPS.md`. El overlay `docker-compose.prod.local.yml` no se usa en el VPS.
