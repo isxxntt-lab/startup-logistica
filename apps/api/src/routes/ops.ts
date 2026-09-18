@@ -8,7 +8,7 @@ import {
   listOpsLogs,
   runOpsChecks,
   withCorrelation,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 import { agenciaPorApiKey } from "../auth-agencia.js";
 

@@ -11,7 +11,7 @@ import {
   runOpsChecks,
   sanitizeOpsPayload,
   withCorrelation,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";
 
 const pool = new pg.Pool({
   connectionString:

@@ -5,7 +5,7 @@ import type {
   TrackingPosition,
   TrackingSession,
   TrackingSessionStatus,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/tracking";
 
 export type TokenGate = "loading" | "valid" | "expired" | "used" | "invalid";
 

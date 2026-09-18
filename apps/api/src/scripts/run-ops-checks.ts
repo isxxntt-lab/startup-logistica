@@ -2,7 +2,7 @@ import {
   applyOpsSchema,
   initOps,
   runOpsChecks,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 
 initOps(pool);

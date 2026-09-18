@@ -2,4 +2,4 @@ export {
   evaluateOpsAlerts,
   persistOpsAlerts,
   runOpsChecks,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";

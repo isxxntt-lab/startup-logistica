@@ -1,12 +1,14 @@
 import {
   STREAMS,
-  closeAttemptDwell,
-  ensureOpenAttempt,
-  logOps,
   type LocationUpdated,
   type NotificationRequested,
   serializeEvent,
 } from "@startup-logistica/shared";
+import {
+  closeAttemptDwell,
+  ensureOpenAttempt,
+  logOps,
+} from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 import { redis } from "../redis.js";
 

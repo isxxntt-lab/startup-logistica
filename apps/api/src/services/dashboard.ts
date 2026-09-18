@@ -1,6 +1,5 @@
 import {
   ESTADO_A_DELIVERY_STATUS,
-  getOpsMetrics,
   type DashboardFilters,
   type DashboardPayload,
   type Delivery,
@@ -8,6 +7,7 @@ import {
   type DeliveryKpis,
   type KpiTrendPoint,
 } from "@startup-logistica/shared";
+import { getOpsMetrics } from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 
 function round(n: number, digits = 2): number {

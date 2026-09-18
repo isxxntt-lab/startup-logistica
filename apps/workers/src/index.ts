@@ -1,11 +1,9 @@
 import {
   CONSUMER_GROUPS,
   STREAMS,
-  applyOpsSchema,
-  initOps,
-  withCorrelation,
   type DomainEvent,
 } from "@startup-logistica/shared";
+import { applyOpsSchema, initOps } from "@startup-logistica/shared/ops";
 import { consumeStream } from "./consume.js";
 import { handleNotification } from "./consumers/notifications.js";
 import { handleWebhook } from "./consumers/webhooks.js";

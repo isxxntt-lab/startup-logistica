@@ -1,9 +1,9 @@
 import {
   CONSUMER_GROUPS,
   parseEvent,
-  withCorrelation,
   type DomainEvent,
 } from "@startup-logistica/shared";
+import { withCorrelation } from "@startup-logistica/shared/ops";
 import { redis } from "./redis.js";
 
 type Handler = (event: DomainEvent, id: string) => Promise<void>;

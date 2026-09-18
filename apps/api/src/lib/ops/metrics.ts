@@ -1,1 +1,1 @@
-export { getOpsMetrics, getOpsHealth, listOpsLogs } from "@startup-logistica/shared";
+export { getOpsMetrics, getOpsHealth, listOpsLogs } from "@startup-logistica/shared/ops";

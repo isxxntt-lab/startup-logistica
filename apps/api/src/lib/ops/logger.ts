@@ -7,4 +7,4 @@ export {
   sanitizeOpsPayload,
   initOps,
   getOpsDb,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";

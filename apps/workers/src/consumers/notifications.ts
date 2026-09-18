@@ -1,16 +1,18 @@
 import {
   assertTransicion,
+  plantillaParaMotivo,
+  renderPlantilla,
+  repartidorChannel,
+  type PlantillaId,
+  type NotificationRequested,
+} from "@startup-logistica/shared";
+import {
   currentCorrelationId,
   logOps,
   markApproachNotified,
   nextNotificationChannel,
-  plantillaParaMotivo,
-  renderPlantilla,
-  repartidorChannel,
   type NotificationChannel,
-  type NotificationRequested,
-  type PlantillaId,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 import { firmarTokenCliente } from "../jwt.js";
 import { redis } from "../redis.js";

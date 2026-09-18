@@ -1,5 +1,5 @@
 import type { WebhookReceived } from "@startup-logistica/shared";
-import { logOps } from "@startup-logistica/shared";
+import { logOps } from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 
 export async function handleWebhook(event: WebhookReceived) {

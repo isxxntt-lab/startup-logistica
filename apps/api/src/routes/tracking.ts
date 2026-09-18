@@ -3,12 +3,14 @@ import { z } from "zod";
 import {
   canConfirmPresence,
   canReschedule,
-  logOps,
-  markRecipientResponse,
-  tokenFingerprint,
   type EstadoParada,
   repartidorChannel,
 } from "@startup-logistica/shared";
+import {
+  logOps,
+  markRecipientResponse,
+  tokenFingerprint,
+} from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 import { peekAgenciaId, verificarTokenCliente } from "../jwt.js";
 import { redisPub } from "../redis.js";

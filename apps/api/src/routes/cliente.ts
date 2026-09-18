@@ -2,15 +2,17 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   assertTransicion,
+  type EstadoParada,
+  repartidorChannel,
+} from "@startup-logistica/shared";
+import {
   logOps,
   markRecipientResponse,
   tokenFingerprint,
-  type EstadoParada,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 import { peekAgenciaId, verificarTokenCliente } from "../jwt.js";
 import { redisPub } from "../redis.js";
-import { repartidorChannel } from "@startup-logistica/shared";
 
 const respuestaSchema = z.object({
   accion: z.enum(["confirmado", "ausente", "reprogramado", "reasignado"]),

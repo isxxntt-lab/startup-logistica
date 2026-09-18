@@ -7,10 +7,7 @@ import {
   type EstadoParada,
 } from "@startup-logistica/shared";
 import { toLocationUpdated } from "../location.js";
-import {
-  completeOpenAttempt,
-  logOps,
-} from "@startup-logistica/shared";
+import { completeOpenAttempt, logOps } from "@startup-logistica/shared/ops";
 
 const ubicacionSchema = z.object({
   event: z.literal("location_update").optional(),

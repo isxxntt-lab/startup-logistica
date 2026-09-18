@@ -3,7 +3,7 @@ import {
   canConfirmPresence,
   canReschedule,
   recipientSessionStatus,
-} from "@startup-logistica/shared";
+} from "@startup-logistica/shared/tracking";
 
 describe("recipientSessionStatus", () => {
   it("alinea estados de parada con la UI de destinatario", () => {
