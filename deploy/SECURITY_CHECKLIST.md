@@ -24,6 +24,7 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] Quiet hours Europe/Madrid 22:00–08:00: el worker aplaza SMS/WhatsApp (`notification_jobs.pending` + `next_retry_at` a las 08:00); push (`app`) se envía. Sin consentimiento o canal caído: `skipped` y fallback WA→SMS solo si el siguiente canal tiene consentimiento y está disponible (no se spamea)
 - [x] `RESUME_ERROR` en el poll de jobs aplazados: backoff `next_retry_at` 30s → 2m → 10m; `status=failed` al cuarto intento (no queda `pending` reintentando cada poll)
 - [x] Smoke staging E2E documentado (`deploy/STAGING_SMOKE.md`) y pasos opcionales en `scripts/prod-healthcheck.sh` (`STAGING_BASE`, `STAGING_SMOKE=1`). Sin Twilio/Meta/ACME reales. **Antes de DNS público.**
+- [x] HTTPS local con overlay (`docker-compose.prod.local.yml` + `Caddyfile.local` `tls internal`). El `Caddyfile` de producción sigue con ACME. Ver `deploy/LOCAL_HTTPS.md`.
 
 ## Operacional (hacer en el VPS, no es diff)
 

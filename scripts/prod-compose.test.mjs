@@ -391,3 +391,158 @@ describe("smoke staging E2E (docs + healthcheck, sin VPS)", () => {
     );
   });
 });
+
+function lastPnpmInstallIndex(dockerfile) {
+  return dockerfile.lastIndexOf("pnpm install --frozen-lockfile");
+}
+
+describe("Docker build: COPY no choca con node_modules de pnpm", () => {
+  it(".dockerignore excluye node_modules anidados", () => {
+    const dockerignore = readFileSync(join(root, ".dockerignore"), "utf8");
+    assert.match(dockerignore, /^\*\*\/node_modules$/m);
+    assert.match(dockerignore, /^\*\*\/\.pnpm-store$/m);
+  });
+
+  it("api, workers y web copian sources y limpian node_modules antes del install", () => {
+    for (const rel of [
+      "apps/api/Dockerfile",
+      "apps/workers/Dockerfile",
+      "apps/web-cliente/Dockerfile",
+    ]) {
+      const df = readFileSync(join(root, rel), "utf8");
+      const copyShared = df.search(/COPY packages\/shared packages\/shared/);
+      const installAt = lastPnpmInstallIndex(df);
+      assert.ok(copyShared >= 0, `${rel} COPY packages/shared`);
+      assert.ok(installAt > copyShared, `${rel} pnpm install después de copiar sources`);
+      assert.match(df, /rm -rf[^\n]*node_modules/);
+      const rmAt = df.search(/rm -rf[^\n]*node_modules/);
+      assert.ok(rmAt >= 0 && rmAt < installAt, `${rel} rm node_modules antes del install`);
+    }
+  });
+});
+
+describe("web tmpfs owned by nginx UID 101", () => {
+  it("cada mount de nginx declara uid=101,gid=101,mode=1777", () => {
+    const mounts = (services.web.tmpfs ?? []).map(String);
+    for (const path of ["/var/cache/nginx", "/var/run", "/var/log/nginx", "/var/lib/nginx", "/tmp"]) {
+      const mount = mounts.find((m) => m === path || m.startsWith(`${path}:`));
+      assert.ok(mount, `web tmpfs ${path}`);
+      assert.match(mount, /uid=101/, `${path} uid=101`);
+      assert.match(mount, /gid=101/, `${path} gid=101`);
+      assert.match(mount, /mode=1777/, `${path} mode=1777`);
+    }
+  });
+});
+
+describe("HTTPS local sin romper ACME de prod", () => {
+  const localCaddy = readFileSync(join(root, "Caddyfile.local"), "utf8");
+  const localCompose = readFileSync(join(root, "docker-compose.prod.local.yml"), "utf8");
+  const localEnv = readFileSync(join(root, ".env.production.local.example"), "utf8");
+  const localDoc = readFileSync(join(root, "deploy", "LOCAL_HTTPS.md"), "utf8");
+
+  it("Caddyfile de producción no fuerza tls internal", () => {
+    assert.doesNotMatch(caddyfile, /tls internal/);
+    assert.match(caddyfile, /email\s+\{\$ACME_EMAIL/);
+  });
+
+  it("Caddyfile.local usa tls internal en localhost y api.localhost", () => {
+    assert.match(localCaddy, /local_certs/);
+    assert.match(localCaddy, /tls internal/);
+    assert.match(localCaddy, /^localhost \{/m);
+    assert.match(localCaddy, /^api\.localhost \{/m);
+    assert.doesNotMatch(localCaddy, /rutacerca\.es/);
+    assert.doesNotMatch(localCaddy, /ACME_EMAIL/);
+  });
+
+  it("el overlay monta Caddyfile.local y no pide secretos reales", () => {
+    assert.match(localCompose, /Caddyfile\.local:\/etc\/caddy\/Caddyfile/);
+    assert.match(localCompose, /SITE_TRACKING:\s*localhost/);
+    assert.match(localCompose, /SITE_API:\s*api\.localhost/);
+    assert.match(localEnv, /^SITE_TRACKING=localhost$/m);
+    assert.match(localEnv, /^SITE_API=api\.localhost$/m);
+    assert.match(localEnv, /local-dev-only/);
+    assert.match(localDoc, /tls internal/);
+    assert.match(localDoc, /docker-compose\.prod\.local\.yml/);
+    assert.match(localDoc, /overlay en el VPS/);
+  });
+});
+
+describe("shared barrel y workers geofence", () => {
+  it("el barrel reexporta tracking-token y el pipeline de notificaciones", () => {
+    const barrel = readFileSync(join(root, "packages/shared/src/index.ts"), "utf8");
+    assert.match(barrel, /export \* from "\.\/tracking-token\.js"/);
+    assert.match(barrel, /export \* from "\.\/notifications\/pipeline\.js"/);
+    assert.match(barrel, /export \* from "\.\/notifications\/dedupe\.js"/);
+
+    const token = readFileSync(
+      join(root, "packages/shared/src/tracking-token.ts"),
+      "utf8",
+    );
+    assert.match(token, /export const ENLACE_YA_NO_VALIDO/);
+    assert.match(token, /export const TRACKING_ACTIONS/);
+
+    const pipeline = readFileSync(
+      join(root, "packages/shared/src/notifications/pipeline.ts"),
+      "utf8",
+    );
+    assert.match(pipeline, /export async function enqueueNotification/);
+  });
+
+  it("geofence exporta handleGeofence y el alias onLocationUpdate", () => {
+    const src = readFileSync(
+      join(root, "apps/workers/src/consumers/geofence.ts"),
+      "utf8",
+    );
+    const index = readFileSync(join(root, "apps/workers/src/index.ts"), "utf8");
+    assert.match(src, /export async function handleGeofence/);
+    assert.match(src, /export const onLocationUpdate = handleGeofence/);
+    assert.match(index, /import \{ handleGeofence \} from "\.\/consumers\/geofence\.js"/);
+  });
+});
+
+describe("seed SQL idempotente (delivery_attempts)", () => {
+  it("no inserta demo rows si la parada no existe", () => {
+    for (const rel of [
+      "infra/postgres/02-seed.sql",
+      "infra/postgres/03-analytics.sql",
+    ]) {
+      const sql = readFileSync(join(root, rel), "utf8");
+      assert.match(sql, /INSERT INTO delivery_attempts/);
+      assert.match(sql, /WHERE EXISTS \(/);
+      assert.match(sql, /FROM paradas WHERE id = '55555555-5555-5555-5555-555555555551'/);
+      assert.match(sql, /NOT EXISTS \(/);
+    }
+  });
+});
+
+describe("sin marcadores de conflicto", () => {
+  it("el árbol de sources no tiene <<<<<<<", () => {
+    const result = spawnSync(
+      "grep",
+      [
+        "-R",
+        "-n",
+        "-E",
+        "^<<<<<<< ",
+        "--exclude-dir=node_modules",
+        "--exclude-dir=.git",
+        "--exclude-dir=dist",
+        ".",
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert.equal(result.status === 0 ? result.stdout : "", "", result.stdout);
+  });
+});
+
+describe("gitignore no versiona secretos de prod", () => {
+  it("ignora .env.production y .env.production.local", () => {
+    const gi = readFileSync(join(root, ".gitignore"), "utf8");
+    assert.match(gi, /^\.env\.production$/m);
+    assert.match(gi, /^\.env\.production\.local$/m);
+    assert.ok(existsSync(join(root, ".env.production.example")));
+    assert.ok(existsSync(join(root, ".env.production.local.example")));
+    assert.equal(existsSync(join(root, ".env.production")), false);
+  });
+});
+

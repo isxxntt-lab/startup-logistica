@@ -1,34 +1,37 @@
 import {
-  STREAMS,
-  serializeEvent,
+  enqueue as enqueueOn,
+  enqueueGeofence as enqueueGeofenceOn,
+  enqueueNotification as enqueueNotificationOn,
+  enqueueRouteProgress as enqueueRouteProgressOn,
+  enqueueWebhook as enqueueWebhookOn,
   type DomainEvent,
+  type LocationUpdated,
+  type NotificationRequested,
+  type ParadaCompleted,
+  type WebhookReceived,
 } from "@startup-logistica/shared";
 import { redis } from "./redis.js";
 
 export async function enqueue(stream: string, event: DomainEvent): Promise<string> {
-  return redis.xadd(stream, "*", ...Object.entries(serializeEvent(event)).flat());
+  return enqueueOn(redis, stream, event);
 }
 
 export async function enqueueNotification(
-  event: Extract<DomainEvent, { type: "NOTIFICATION_REQUESTED" }>,
+  event: NotificationRequested,
 ): Promise<string> {
-  return enqueue(STREAMS.notifications, event);
+  return enqueueNotificationOn(redis, event);
 }
 
-export async function enqueueWebhook(
-  event: Extract<DomainEvent, { type: "WEBHOOK_RECEIVED" }>,
-): Promise<string> {
-  return enqueue(STREAMS.webhooks, event);
+export async function enqueueWebhook(event: WebhookReceived): Promise<string> {
+  return enqueueWebhookOn(redis, event);
 }
 
-export async function enqueueGeofence(
-  event: Extract<DomainEvent, { type: "LOCATION_UPDATED" }>,
-): Promise<string> {
-  return enqueue(STREAMS.geofence, event);
+export async function enqueueGeofence(event: LocationUpdated): Promise<string> {
+  return enqueueGeofenceOn(redis, event);
 }
 
 export async function enqueueRouteProgress(
-  event: Extract<DomainEvent, { type: "PARADA_COMPLETED" }>,
+  event: ParadaCompleted,
 ): Promise<string> {
-  return enqueue(STREAMS.routeProgress, event);
+  return enqueueRouteProgressOn(redis, event);
 }

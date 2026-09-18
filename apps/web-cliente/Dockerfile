@@ -12,10 +12,15 @@ COPY apps/web-cliente/package.json apps/web-cliente/
 COPY apps/web-repartidor/package.json apps/web-repartidor/
 COPY apps/web-dashboard/package.json apps/web-dashboard/
 
-RUN pnpm install --frozen-lockfile
-
+# Copy sources BEFORE pnpm install. Installing first creates package-local
+# node_modules (often a symlink into .pnpm); a later COPY of the host tree
+# then fails with "cannot copy to non-directory" when the context still has
+# Windows/pnpm node_modules junctions.
 COPY packages/shared packages/shared
 COPY apps/web-cliente apps/web-cliente
+
+RUN rm -rf packages/shared/node_modules apps/*/node_modules \
+    && pnpm install --frozen-lockfile
 
 ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL

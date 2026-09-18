@@ -9,13 +9,15 @@
     ".": "./src/index.ts",
     "./dashboard": "./src/dashboard.ts",
     "./tracking": "./src/tracking.ts",
+    "./tracking-token": "./src/tracking-token.ts",
+    "./notifications": "./src/notifications/pipeline.ts",
     "./ops": "./src/ops/index.ts"
   },
   "scripts": {
     "dev": "node -e \"process.exit(0)\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
-    "test": "tsx --test src/ops/notification-policy.test.ts"
+    "test": "tsx --test src/ops/notification-policy.test.ts src/notifications/pipeline.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

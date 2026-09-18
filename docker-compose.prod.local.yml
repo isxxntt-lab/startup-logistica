@@ -1,0 +1,19 @@
+# Overlay local para el stack de docker-compose.prod.yml.
+# No sustituye el Caddyfile de producción ni cambia ACME en el VPS.
+#
+#   cp .env.production.local.example .env.production.local
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+#     --env-file .env.production.local up -d --build
+#
+# Detalle: deploy/LOCAL_HTTPS.md
+
+name: startup-logistica-prod
+
+services:
+  caddy:
+    environment:
+      SITE_TRACKING: localhost
+      SITE_API: api.localhost
+      ACME_EMAIL: local@localhost
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
