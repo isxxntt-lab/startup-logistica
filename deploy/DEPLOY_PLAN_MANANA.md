@@ -1,8 +1,8 @@
 # Plan de despliegue — mañana
 
-PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de contenedores: **PR #4**. Go-live ops + auth WS: **PR #5**. Compose endurecido: **PR #6**. Auth HTTP `/repartidor/*`: **PR #7**. Este follow-up: contenedores non-root (UID ≠ 0).
+PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de contenedores: **PR #4**. Go-live ops + auth WS: **PR #5**. Compose endurecido: **PR #6**. Auth HTTP `/repartidor/*`: **PR #7**. Este follow-up: contenedores non-root (UID ≠ 0). Backup/restore PostGIS: este PR (`deploy/BACKUP_RESTORE.md`).
 
-1. Merge PR #4, #5, #6, #7 y este follow-up (o desplegar el SHA que los incluya).
+1. Merge PR #4, #5, #6, #7, non-root y este follow-up de backup (o desplegar el SHA que los incluya).
 2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG, `ACME_EMAIL` real). No commitear el fichero.
 3. DNS: `SITE_TRACKING` y `SITE_API` → IP del VPS; abrir 80/443.
 4. Crear agencia de prod a mano (hash SHA-256 de la API key). Prod **no** monta `infra/postgres/02-seed.sql`.
@@ -15,6 +15,7 @@ PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de conte
 
 6. Esperar healthy: `postgres`, `redis`, `api`, `web`, `workers`. Caddy arranca con `service_healthy` de `api` y `web`.
 7. `./scripts/prod-healthcheck.sh "https://$SITE_API" "https://$SITE_TRACKING"`
-8. Smoke: tracking `?token=`, **Estaré ahí** (`/api/tracking/confirm-presence`), `POST /api/ops/checks`. `GET /repartidor/<id>/ruta-hoy` sin `x-api-key` debe ser **401**.
-9. Revisar `ops_alerts` `open` = 0 críticos (`GET /api/ops/health` → `openCriticalAlerts`).
-10. Rollback: `docker compose -f docker-compose.prod.yml --env-file .env.production down` + imagen/`IMAGE` anterior si etiquetaste builds.
+8. **Antes de go-live:** backup inicial + dry-run de restore en staging (otra instancia/volumen, nunca `pgdata_prod`). `CONFIRM=yes ./scripts/restore-postgres.sh <dump>` y `scripts/verify-postgis.sql` (extensión PostGIS, `geography_columns`, `ST_DWithin`). Sin restore verificado no se abre tráfico. Detalle: `deploy/BACKUP_RESTORE.md`.
+9. Smoke: tracking `?token=`, **Estaré ahí** (`/api/tracking/confirm-presence`), `POST /api/ops/checks`. `GET /repartidor/<id>/ruta-hoy` sin `x-api-key` debe ser **401**.
+10. Revisar `ops_alerts` `open` = 0 críticos (`GET /api/ops/health` → `openCriticalAlerts`).
+11. Rollback: `docker compose -f docker-compose.prod.yml --env-file .env.production down` + imagen/`IMAGE` anterior si etiquetaste builds. Datos: restaurar el dump previo (`CONFIRM=yes`).
