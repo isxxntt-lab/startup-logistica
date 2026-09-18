@@ -53,7 +53,7 @@ async function main() {
   for (const ping of GROK_LOCATION_PINGS) {
     const res = await fetch(`${api}/events/location_update`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify(ping),
     });
     if (!res.ok) throw new Error(`Ping falló: ${res.status} ${await res.text()}`);

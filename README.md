@@ -48,7 +48,7 @@ flowchart LR
 |---|---|
 | Destinatario | SPA sin login. Lee **solo** `?token=` (nunca `localStorage`). Mapa Leaflet en poll 8s + **Estaré ahí** / **Reprogramar**. |
 | Agencia / ops | API key `x-api-key`. Dashboard, tokens de parada, `/api/ops` (health, logs, métricas, checks). |
-| Repartidor | Pings GPS, ruta de hoy, marcar entregado/ausente. Canal Redis en tiempo real. |
+| Repartidor | Pings GPS, ruta de hoy, marcar entregado/ausente. Canal Redis en tiempo real. HTTP y WS exigen API key de agencia (`x-api-key`). |
 | Workers | Consumer groups sobre streams: notificaciones (WhatsApp→SMS), geocerca, progreso de ruta, webhooks. |
 | Shared | Tipos, FSM de paradas, contratos de tracking y ops. Subpaths: `@startup-logistica/shared/tracking` y `@startup-logistica/shared/ops`. |
 
@@ -127,7 +127,7 @@ Eso ejecuta `pnpm -r --if-present run test` en el workspace:
 
 | Paquete | Qué cubre |
 |---|---|
-| `apps/api` | Unitarias del gate de token (`tracking-gate.test.ts`) e **integrales** de ops contra PostGIS (`ops.test.ts`: logs con `correlation_id`, alertas idempotentes, métricas de failure avoided y dwell) |
+| `apps/api` | Unitarias del gate de token (`tracking-gate.test.ts`), auth HTTP/WS de repartidor (`auth-repartidor.test.ts`, `ws/auth.test.ts`) e **integrales** de ops contra PostGIS (`ops.test.ts`: logs con `correlation_id`, alertas idempotentes, métricas de failure avoided y dwell) |
 | `apps/web-cliente` | Cliente HTTP de tracking, 410 `gone`, y que **Estaré ahí** / **Reprogramar** llaman a endpoints distintos |
 
 Otros comandos:
@@ -227,7 +227,7 @@ curl -X POST http://localhost:3000/agencia/paradas/55555555-5555-5555-5555-55555
   -H "x-api-key: demo-api-key"
 ```
 
-Abre la `url` que devuelve (`/?token=…`). En la app del repartidor, cargar `repartidor_001` y pulsar el ping GPS dispara geocerca. Completar paradas dispara **progreso de ruta**: si faltan exactamente 3, el worker encola WhatsApp (dry-run si no hay Twilio).
+Abre la `url` que devuelve (`/?token=…`). En la app del repartidor, cargar `repartidor_001` (API key `demo-api-key`) y pulsar el ping GPS dispara geocerca. Completar paradas dispara **progreso de ruta**: si faltan exactamente 3, el worker encola WhatsApp (dry-run si no hay Twilio).
 
 Parada seed de Santiago Demo: `55555555-5555-5555-5555-555555555554` (Templo de Debod).
 
@@ -254,4 +254,4 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ./scripts/prod-healthcheck.sh https://api.rutacerca.es https://seguimiento.rutacerca.es
 ```
 
-Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados con `ACME_EMAIL`. PostGIS/Redis solo en red `internal`; la API está en `edge`+`internal`. `/ws/repartidor` exige API key de agencia (header o mensaje `auth`).
+Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados con `ACME_EMAIL`. PostGIS/Redis solo en red `internal`; la API está en `edge`+`internal`. `/ws/repartidor` y HTTP `/repartidor/*` exigen API key de agencia (`x-api-key`; el WS también acepta mensaje `auth`).

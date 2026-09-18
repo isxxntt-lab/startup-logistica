@@ -12,10 +12,23 @@ function log(msg: string) {
   logEl.textContent = `${new Date().toLocaleTimeString()} ${msg}\n` + logEl.textContent;
 }
 
+function cabeceras(extra: Record<string, string> = {}) {
+  return {
+    "x-api-key": apiKeyInput.value,
+    ...extra,
+  };
+}
+
 document.querySelector("#load")?.addEventListener("click", async () => {
   const id = ridInput.value;
-  const res = await fetch(`${api}/repartidor/${id}/ruta-hoy`);
+  const res = await fetch(`${api}/repartidor/${id}/ruta-hoy`, {
+    headers: cabeceras(),
+  });
   const data = await res.json();
+  if (!res.ok) {
+    log(`ruta-hoy ${res.status}: ${data.error ?? res.statusText}`);
+    return;
+  }
   rutaId = data.id;
   paradasEl.innerHTML = "";
   const paradas = data.paradas as Array<{
@@ -38,7 +51,7 @@ document.querySelector("#load")?.addEventListener("click", async () => {
     btn.addEventListener("click", async () => {
       await fetch(`${api}/repartidor/paradas/${p.id}/estado`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: cabeceras({ "Content-Type": "application/json" }),
         body: JSON.stringify({ estado: "entregado" }),
       });
       (document.querySelector("#load") as HTMLButtonElement).click();
@@ -75,7 +88,7 @@ document.querySelector("#ping")?.addEventListener("click", async () => {
   };
   await fetch(`${api}/repartidor/${id}/ubicacion`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: cabeceras({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   log(

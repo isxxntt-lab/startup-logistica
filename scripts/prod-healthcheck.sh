@@ -35,6 +35,13 @@ if [[ -n "$WEB_BASE" ]]; then
   curl -fsS -o /tmp/web-index.html -w "web_http %{http_code}\n" "$WEB_BASE/"
 fi
 
+log "GET $API_BASE/repartidor/probe/ruta-hoy (expect 401)"
+unauth_code=$(curl -sS -o /tmp/repartidor-unauth.json -w "%{http_code}" "$API_BASE/repartidor/probe/ruta-hoy")
+if [[ "$unauth_code" != "401" ]]; then
+  log "FAIL: /repartidor/* sin x-api-key debía ser 401, fue $unauth_code"
+  exit 1
+fi
+
 auth_args=()
 if [[ -n "$OPS_TOKEN_VALUE" ]]; then
   auth_args=(-H "x-ops-token: $OPS_TOKEN_VALUE")
