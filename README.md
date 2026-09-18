@@ -239,7 +239,7 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 |---|---|
 | `apps/api/Dockerfile` | API Fastify |
 | `apps/workers/Dockerfile` | Consumers Redis |
-| `apps/web-cliente/Dockerfile` | Build Vite + nginx |
+| `apps/web-cliente/Dockerfile` | Build Vite + nginx unprivileged (`USER 101`, :8080) |
 | `docker-compose.prod.yml` | PostGIS + Redis internos, Caddy en 80/443 |
 | `Caddyfile` | TLS y reverse proxy |
 | `.env.production.example` | Plantilla de secretos (no commitear valores reales) |

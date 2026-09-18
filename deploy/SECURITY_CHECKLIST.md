@@ -1,8 +1,8 @@
 # Checklist seguridad producción
 
-Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. Este PR cierra auth HTTP de `/repartidor/*`.
+Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. #7 cierra auth HTTP de `/repartidor/*`. Este PR: runners sin UID 0.
 
-## Cubierto en código / compose (#4 + #5 + #6 + este PR)
+## Cubierto en código / compose (#4 + #5 + #6 + #7 + este PR)
 
 - [x] `.env.production` no está en git; solo `.env.production.example`
 - [x] Postgres/Redis sin `ports` públicos (solo red `internal` en `docker-compose.prod.yml`)
@@ -16,8 +16,9 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] `/ws/repartidor` autentica con API key de agencia (header `x-api-key` o mensaje `{ tipo: "auth", apiKey, id }`)
 - [x] HTTP `/repartidor/*` (y `POST /events/location_update`) exige la misma API key: 401 sin clave/clave inválida, 403 si el recurso no es de esa agencia
 - [x] `read_only: true` + `no-new-privileges` + `tmpfs` en caddy/web/api/workers/redis (Postgres no es read-only: escribe el datadir)
-- [x] Healthchecks de `web` (HTTP nginx) y `workers` (ping Redis + `SELECT 1` en Postgres)
+- [x] Healthchecks de `web` (HTTP nginx :8080) y `workers` (ping Redis + `SELECT 1` en Postgres)
 - [x] Email ACME en Caddy (`ACME_EMAIL` / bloque global `{ email ... }`)
+- [x] USER ≠ 0 en api/workers (`USER 10001:10001`, usuario `app`) y web (`nginxinc/nginx-unprivileged`, `USER 101`, `listen 8080`)
 
 ## Operacional (hacer en el VPS, no es diff)
 

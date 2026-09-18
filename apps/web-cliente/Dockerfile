@@ -22,7 +22,8 @@ ENV VITE_API_URL=$VITE_API_URL
 
 RUN pnpm --filter @startup-logistica/web-cliente build
 
-FROM nginx:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY apps/web-cliente/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web-cliente/dist /usr/share/nginx/html
-EXPOSE 80
+USER 101
+EXPOSE 8080

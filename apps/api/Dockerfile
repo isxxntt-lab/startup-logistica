@@ -18,8 +18,13 @@ COPY packages/shared packages/shared
 COPY apps/api apps/api
 COPY infra/postgres infra/postgres
 
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid 10001 --home-dir /app --no-create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+
 WORKDIR /app/apps/api
 ENV NODE_ENV=production
 EXPOSE 3000
+USER 10001:10001
 
 CMD ["pnpm", "start:prod"]
