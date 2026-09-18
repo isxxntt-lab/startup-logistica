@@ -311,6 +311,8 @@ describe("orden de merge y operacional VPS", () => {
     assert.match(src, /#4 → #5 → #6 → #7 → #8 → #10 → #11/);
     assert.match(src, /#9 rebaseado/);
     assert.match(src, /incluye.*#8.*#10.*#11/s);
+    assert.match(src, /RESUME_ERROR/);
+    assert.match(src, /30s → 2m → 10m/);
     assert.match(src, /COPY --from=build --chown=101:101/);
     assert.match(src, /Operacional en el VPS — no es código/);
     assert.match(src, /ACME_EMAIL/);

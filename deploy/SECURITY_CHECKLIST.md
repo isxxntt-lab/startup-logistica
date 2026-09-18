@@ -22,6 +22,7 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] `COPY --from=build --chown=101:101` del `dist` en `apps/web-cliente/Dockerfile` (html servido por UID 101)
 - [x] Scripts de backup/restore PostGIS (`scripts/backup-postgres.sh`, `scripts/restore-postgres.sh`) + runbook `deploy/BACKUP_RESTORE.md`
 - [x] Quiet hours Europe/Madrid 22:00–08:00: el worker aplaza SMS/WhatsApp (`notification_jobs.pending` + `next_retry_at` a las 08:00); push (`app`) se envía. Sin consentimiento o canal caído: `skipped` y fallback WA→SMS solo si el siguiente canal tiene consentimiento y está disponible (no se spamea)
+- [x] `RESUME_ERROR` en el poll de jobs aplazados: backoff `next_retry_at` 30s → 2m → 10m; `status=failed` al cuarto intento (no queda `pending` reintentando cada poll)
 
 ## Operacional (hacer en el VPS, no es diff)
 

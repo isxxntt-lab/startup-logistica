@@ -18,6 +18,7 @@ import { pool } from "../db.js";
 import { firmarTokenCliente } from "../jwt.js";
 import { redis } from "../redis.js";
 import { asChannel, destinationForChannel, planForParada } from "./notification-plan.js";
+import { planResumeErrorRetry } from "./resume-backoff.js";
 
 export { planForParada, asChannel, destinationForChannel };
 
@@ -746,10 +747,28 @@ export async function processDueNotificationJobs(now = new Date()): Promise<numb
       await handleNotification(event, { now, resumeJobId: job.id });
     } catch (err) {
       console.error(`[notif] resume job=${job.id}`, err);
+      const decision = planResumeErrorRetry(payload.resume_attempts, now);
+      if (decision.status === "failed") {
+        await updateJob(job.id, {
+          status: "failed",
+          errorCode: "RESUME_ERROR",
+          payload: {
+            error: String(err),
+            resume_attempts: decision.attempt,
+          },
+          nextRetryAt: null,
+        });
+        continue;
+      }
       await updateJob(job.id, {
         status: "pending",
         errorCode: "RESUME_ERROR",
-        payload: { error: String(err) },
+        payload: {
+          error: String(err),
+          resume_attempts: decision.attempt,
+          next_retry_at: decision.nextRetryAt.toISOString(),
+        },
+        nextRetryAt: decision.nextRetryAt,
       });
     }
   }

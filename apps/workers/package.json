@@ -9,7 +9,7 @@
     "start:prod": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
-    "test": "tsx --test src/consumers/notifications-plan.test.ts"
+    "test": "tsx --test src/consumers/notifications-plan.test.ts src/consumers/resume-backoff.test.ts"
   },
   "dependencies": {
     "@startup-logistica/shared": "workspace:*",

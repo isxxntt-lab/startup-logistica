@@ -4,7 +4,7 @@ PRs de infra ya en vuelo. **No hay features nuevas en #11**: solo el orden, qué
 
 Orden lineal (Camino A, head más completo):
 
-**#4 → #5 → #6 → #7 → #8 → #10 → #11 → este PR (#9 rebaseado)**
+**#4 → #5 → #6 → #7 → #8 → #10 → #11 → este PR (#9 rebaseado + backoff RESUME_ERROR)**
 
 Quiet hours (#9) **incluye** #8 (non-root), #10 (backup/restore) y #11 (`COPY --chown=101:101` + este orden).
 
@@ -18,7 +18,7 @@ Quiet hours (#9) **incluye** #8 (non-root), #10 (backup/restore) y #11 (`COPY --
               └─ #8 USER ≠ 0, nginx :8080
                    └─ #10 backup/restore PostGIS
                         └─ #11 COPY --chown=101:101 + MERGE_ORDER
-                             └─ este PR: #9 quiet hours rebaseado sobre #11
+                             └─ este PR: #9 quiet hours rebaseado + backoff RESUME_ERROR
 ```
 
 **#9 ya no está solo sobre #7.** El código de quiet hours (`packages/shared`, `apps/workers`, `infra/postgres/04-ops.sql`) no solapa con non-root ni backup. Los conflictos al rebasear fueron de docs y se resolvieron conservando quiet hours **y** backup/non-root/chown:
@@ -55,7 +55,7 @@ Más movimiento de ramas; mismo resultado de código si los docs se resuelven bi
 | **#8** | Non-root | Último `USER` ≠ 0. api/workers `USER 10001:10001`. web `nginxinc/nginx-unprivileged`, `USER 101`, `listen 8080`, compose `expose: ["8080"]`, Caddy `reverse_proxy web:8080`. |
 | **#10** | Backup/restore PostGIS | `scripts/backup-postgres.sh` (timestamp, SHA-256, `umask 077`). Restore **destructivo** solo con `CONFIRM=yes` exacto. `PLAN=1` no muta. `scripts/verify-postgis.sql`. Runbook `deploy/BACKUP_RESTORE.md`. |
 | **#11** | Follow-up Grey (chown) | En `apps/web-cliente/Dockerfile`: `COPY --from=build --chown=101:101 …/dist /usr/share/nginx/html`. |
-| **#9 / este PR** | Quiet hours + consentimiento (rebaseado sobre #11) | Europe/Madrid **22:00–08:00**: WA/SMS **aplazados** (`QUIET_HOURS`, `next_retry_at` = 08:00), **sin** fallback a SMS de noche. Canal `app` (push) **sí** envía. Sin consentimiento → `skipped`. Incluye #8+#10+#11. |
+| **#9 / este PR** | Quiet hours + consentimiento (rebaseado sobre #11) + backoff Grey | Europe/Madrid **22:00–08:00**: WA/SMS **aplazados** (`QUIET_HOURS`, `next_retry_at` = 08:00), **sin** fallback a SMS de noche. Canal `app` (push) **sí** envía. Sin consentimiento → `skipped`. Incluye #8+#10+#11. `RESUME_ERROR`: `next_retry_at` con backoff **30s → 2m → 10m**; `failed` al 4.º intento (no reintenta cada poll). |
 
 Contrato automatizado (sin Docker ni VPS):
 
