@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>App repartidor (demo)</title>
+    <style>
+      body { font-family: system-ui; margin: 24px; background: #111; color: #eee; }
+      button, input { padding: 8px; margin: 4px 0; }
+      li { margin: 8px 0; }
+      #log { white-space: pre-wrap; background: #222; padding: 12px; min-height: 80px; }
+    </style>
+  </head>
+  <body>
+    <h1>Ruta de hoy</h1>
+    <label>Repartidor ID
+      <input id="rid" value="22222222-2222-2222-2222-222222222222" size="40" />
+    </label>
+    <button id="load">Cargar ruta</button>
+    <button id="ping">Enviar GPS simulado (Madrid)</button>
+    <ul id="paradas"></ul>
+    <h2>Tiempo real</h2>
+    <div id="log"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

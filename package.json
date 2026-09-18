@@ -1,0 +1,20 @@
+{
+  "name": "startup-logistica",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" --filter \"./packages/*\" run dev",
+    "dev:api": "pnpm --filter @startup-logistica/api dev",
+    "dev:workers": "pnpm --filter @startup-logistica/workers dev",
+    "dev:web": "pnpm --filter @startup-logistica/web-cliente dev",
+    "dev:repartidor": "pnpm --filter @startup-logistica/web-repartidor dev",
+    "dev:dashboard": "pnpm --filter @startup-logistica/web-dashboard dev",
+    "demo:geocerca": "pnpm --filter @startup-logistica/api demo:geocerca",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

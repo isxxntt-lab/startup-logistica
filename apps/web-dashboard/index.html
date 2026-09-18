@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard KPIs — RutaCerca</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">Agencia Demo Madrid</p>
+        <h1>KPIs anti-entregas fallidas</h1>
+        <label>API key <input id="key" value="demo-api-key" /></label>
+        <button id="reload">Actualizar</button>
+      </header>
+      <section id="kpis" class="grid"></section>
+      <h2>En geocerca ahora</h2>
+      <ul id="live"></ul>
+      <h2>Entregas recientes</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Estado</th>
+            <th>Repartidor</th>
+            <th>Dirección</th>
+            <th>1.er intento</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

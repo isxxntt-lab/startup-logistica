@@ -1,0 +1,17 @@
+import { createHash } from "node:crypto";
+import type { FastifyRequest } from "fastify";
+import { pool } from "./db.js";
+
+export function apiKeyHash(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+export async function agenciaPorApiKey(request: FastifyRequest) {
+  const key = request.headers["x-api-key"];
+  if (typeof key !== "string") return null;
+  const { rows } = await pool.query(
+    `SELECT * FROM agencias WHERE api_key_hash = $1`,
+    [apiKeyHash(key)],
+  );
+  return rows[0] ?? null;
+}
