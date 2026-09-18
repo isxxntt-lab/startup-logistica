@@ -1,10 +1,15 @@
 # Pasarela TLS de ejemplo (Caddy 2).
 # Hosts separados: SPA de seguimiento + API/WebSocket/webhooks.
 # Sustituye los dominios con SITE_TRACKING y SITE_API (ver .env.production.example).
+# ACME_EMAIL: avisos de caducidad de Let's Encrypt (bloque global).
 #
 # Variante un solo host (descomenta el bloque final y comenta los dos primeros):
 #   PUBLIC_WEB_URL=https://app.rutacerca.es
 #   VITE_API_URL=   (vacío: el SPA llama a /api en el mismo origen)
+
+{
+	email {$ACME_EMAIL:ops@rutacerca.es}
+}
 
 {$SITE_TRACKING:seguimiento.rutacerca.es} {
 	encode gzip

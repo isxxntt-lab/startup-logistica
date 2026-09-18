@@ -1,9 +1,9 @@
 # Plan de despliegue — mañana
 
-PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. La infra de contenedores está en **PR #4** (`cursor/prod-docker-caddy-81b7`). Este follow-up no toca Dockerfiles ni compose.
+PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de contenedores: **PR #4**. Go-live ops + auth WS: **PR #5**. Este follow-up endurece compose/Caddy (read_only, healthchecks, ACME, redes).
 
-1. Merge PR #4 y este follow-up (o desplegar el SHA que los incluya).
-2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG). No commitear el fichero.
+1. Merge PR #4, #5 y este follow-up (o desplegar el SHA que los incluya).
+2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG, `ACME_EMAIL` real). No commitear el fichero.
 3. DNS: `SITE_TRACKING` y `SITE_API` → IP del VPS; abrir 80/443.
 4. Crear agencia de prod a mano (hash SHA-256 de la API key). Prod **no** monta `infra/postgres/02-seed.sql`.
 5. Arranque:
@@ -13,7 +13,7 @@ PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. La infra de co
    docker compose -f docker-compose.prod.yml --env-file .env.production up -d
    ```
 
-6. Esperar healthy: `api`, `postgres`, `redis`. `web` no tiene healthcheck en #4; Caddy arranca con `service_started`.
+6. Esperar healthy: `postgres`, `redis`, `api`, `web`, `workers`. Caddy arranca con `service_healthy` de `api` y `web`.
 7. `./scripts/prod-healthcheck.sh "https://$SITE_API" "https://$SITE_TRACKING"`
 8. Smoke: tracking `?token=`, **Estaré ahí** (`/api/tracking/confirm-presence`), `POST /api/ops/checks`.
 9. Revisar `ops_alerts` `open` = 0 críticos (`GET /api/ops/health` → `openCriticalAlerts`).
