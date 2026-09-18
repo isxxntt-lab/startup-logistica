@@ -21,6 +21,17 @@ test("prod smoke: GET /api/ops/health", { skip: !base }, async () => {
   assert.equal(typeof body.openCriticalAlerts, "number");
 });
 
+test("prod smoke: GET /repartidor/:id/ruta-hoy sin x-api-key → 401", {
+  skip: !base,
+}, async () => {
+  const res = await fetch(
+    `${base}/repartidor/00000000-0000-0000-0000-000000000000/ruta-hoy`,
+  );
+  assert.equal(res.status, 401);
+  const body = (await res.json()) as { error?: string };
+  assert.equal(body.error, "api key inválida");
+});
+
 test("prod smoke: GET /api/ops/metrics (OPS_TOKEN o AGENCY_API_KEY)", {
   skip: !base || !(process.env.OPS_TOKEN || process.env.AGENCY_API_KEY),
 }, async () => {

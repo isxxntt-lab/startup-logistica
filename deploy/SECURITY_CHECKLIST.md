@@ -1,8 +1,8 @@
 # Checklist seguridad producción
 
-Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. Este PR endurece compose (read_only, healthchecks, redes) y ACME en Caddy.
+Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. Este PR cierra auth HTTP de `/repartidor/*`.
 
-## Cubierto en código / compose (#4 + #5 + este PR)
+## Cubierto en código / compose (#4 + #5 + #6 + este PR)
 
 - [x] `.env.production` no está en git; solo `.env.production.example`
 - [x] Postgres/Redis sin `ports` públicos (solo red `internal` en `docker-compose.prod.yml`)
@@ -14,6 +14,7 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] `/api/ops/health` público; métricas/logs/checks con `x-api-key` o `x-ops-token`
 - [x] Rate limit del poll `GET /api/tracking/position` (30/min por IP+token; el SPA poll-ea cada 8s)
 - [x] `/ws/repartidor` autentica con API key de agencia (header `x-api-key` o mensaje `{ tipo: "auth", apiKey, id }`)
+- [x] HTTP `/repartidor/*` (y `POST /events/location_update`) exige la misma API key: 401 sin clave/clave inválida, 403 si el recurso no es de esa agencia
 - [x] `read_only: true` + `no-new-privileges` + `tmpfs` en caddy/web/api/workers/redis (Postgres no es read-only: escribe el datadir)
 - [x] Healthchecks de `web` (HTTP nginx) y `workers` (ping Redis + `SELECT 1` en Postgres)
 - [x] Email ACME en Caddy (`ACME_EMAIL` / bloque global `{ email ... }`)
@@ -27,7 +28,6 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 
 ## Pendiente (fuera de este PR)
 
-- [ ] Auth HTTP de `/repartidor/*` (hoy solo está cerrado el WebSocket `/ws/repartidor`)
 - [ ] Quiet hours / consentimiento WA–SMS (el worker no implementa franja horaria)
 - [ ] Backup + restore de Postgres (procedimiento y prueba de restore)
 - [ ] TTL tracking 48h: el gate y la huella en logs ya existen; no se cambia la política en este PR

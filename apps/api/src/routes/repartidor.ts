@@ -8,6 +8,7 @@ import {
 } from "@startup-logistica/shared";
 import { toLocationUpdated } from "../location.js";
 import { completeOpenAttempt, logOps } from "@startup-logistica/shared/ops";
+import { protegerParada, protegerRepartidor, apiKeyDesdeHeader, autorizarRepartidor } from "../auth-repartidor.js";
 
 const ubicacionSchema = z.object({
   event: z.literal("location_update").optional(),
@@ -94,23 +95,15 @@ async function persistAndEnqueue(repartidorId: string, raw: unknown) {
   return event;
 }
 
-async function resolveRepartidor(idOrCodigo: string): Promise<string | null> {
-  const { rows } = await pool.query(
-    `SELECT id FROM repartidores WHERE id::text = $1 OR codigo = $1`,
-    [idOrCodigo],
-  );
-  return rows[0]?.id ?? null;
-}
-
 export async function repartidorRoutes(app: FastifyInstance) {
   app.post("/repartidor/:id/ubicacion", async (request, reply) => {
     const { id } = request.params as { id: string };
+    const repartidorId = await protegerRepartidor(request, reply, id);
+    if (!repartidorId) return;
     const body = ubicacionSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: body.error.flatten() });
     }
-    const repartidorId = await resolveRepartidor(id);
-    if (!repartidorId) return reply.code(404).send({ error: "repartidor no encontrado" });
     const event = await persistAndEnqueue(repartidorId, {
       ...body.data,
       rutaId: body.data.rutaId,
@@ -124,17 +117,25 @@ export async function repartidorRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: body.error.flatten() });
     }
     const codigo = body.data.courier_id ?? body.data.courierId;
-    if (!codigo) return reply.code(400).send({ error: "courier_id requerido" });
-    const repartidorId = await resolveRepartidor(codigo);
-    if (!repartidorId) return reply.code(404).send({ error: "repartidor no encontrado" });
+    if (!codigo) {
+      const previa = await autorizarRepartidor({
+        apiKey: apiKeyDesdeHeader(request.headers),
+      });
+      if (!previa.ok && previa.status === 401) {
+        return reply.code(401).send({ error: previa.error });
+      }
+      return reply.code(400).send({ error: "courier_id requerido" });
+    }
+    const repartidorId = await protegerRepartidor(request, reply, codigo);
+    if (!repartidorId) return;
     const event = await persistAndEnqueue(repartidorId, body.data);
     return { ok: true, event };
   });
 
   app.get("/repartidor/:id/ruta-hoy", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const repartidorId = await resolveRepartidor(id);
-    if (!repartidorId) return reply.code(404).send({ error: "repartidor no encontrado" });
+    const repartidorId = await protegerRepartidor(request, reply, id);
+    if (!repartidorId) return;
     const { rows } = await pool.query(
       `SELECT r.*,
               json_agg(
@@ -164,20 +165,12 @@ export async function repartidorRoutes(app: FastifyInstance) {
 
   app.post("/repartidor/paradas/:paradaId/estado", async (request, reply) => {
     const { paradaId } = request.params as { paradaId: string };
+    const parada = await protegerParada(request, reply, paradaId);
+    if (!parada) return;
     const body = estadoSchema.safeParse(request.body);
     if (!body.success) {
       return reply.code(400).send({ error: body.error.flatten() });
     }
-
-    const { rows } = await pool.query(
-      `SELECT p.*, r.repartidor_id
-       FROM paradas p
-       JOIN rutas r ON r.id = p.ruta_id
-       WHERE p.id = $1`,
-      [paradaId],
-    );
-    const parada = rows[0];
-    if (!parada) return reply.code(404).send({ error: "parada no encontrada" });
 
     try {
       assertTransicion(parada.estado as EstadoParada, body.data.estado);
