@@ -23,7 +23,7 @@ pnpm dev:repartidor
 ```
 
 - API: http://localhost:3000/health
-- Web cliente: http://localhost:5173
+- Web cliente: http://localhost:5173/?token=…
 - App repartidor demo: http://localhost:5174
 
 ## Demo
@@ -46,7 +46,7 @@ Abre la `url` que devuelve. Marcar entregas en la app del repartidor dispara el 
 | `packages/shared` | Tipos, nombres de streams, máquina de estados de `paradas` |
 | `apps/api` | HTTP + WebSocket + encolado. Los webhooks solo validan firma y hacen `XADD` |
 | `apps/workers` | Consumer groups: notificaciones, webhooks inbound, geocerca `ST_DWithin`, progreso de ruta |
-| `apps/web-cliente` | SPA sin login (JWT en query) + MapLibre |
+| `apps/web-cliente` | SPA sin login (`?token=` en la URL) + Leaflet |
 | `apps/web-repartidor` | Simulador para probar GPS y WS |
 
 Sin credenciales Twilio, las notificaciones se registran en modo dry-run en consola y en `eventos_notificacion`.

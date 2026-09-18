@@ -6,6 +6,7 @@
 body {
   margin: 0;
 }
+#root,
 #app {
   max-width: 720px;
   margin: 0 auto;
@@ -36,11 +37,20 @@ h1 {
   background: #d9efe4;
   font-size: 0.85rem;
 }
-#mapa {
+.muted {
+  color: #5b6b7c;
+}
+#mapa,
+.mapa-loading {
   height: 280px;
   border-radius: 16px;
   overflow: hidden;
   background: #d7dde3;
+}
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  font-family: inherit;
 }
 #acciones {
   display: grid;
@@ -55,23 +65,72 @@ button {
   background: #0f6b4c;
   color: white;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 button.ghost {
   background: white;
   color: #102033;
   border: 1px solid #c9d1d8;
 }
-#puntos {
-  list-style: none;
-  padding: 0;
+.ventana {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #5b6b7c;
 }
-#puntos li {
-  background: white;
-  margin-top: 8px;
-  padding: 12px;
+.ventana input {
+  border: 1px solid #c9d1d8;
   border-radius: 12px;
-  cursor: pointer;
+  padding: 12px;
+  font: inherit;
+  color: #102033;
+}
+.banner {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #d9efe4;
+  color: #0f6b4c;
+  font-weight: 600;
 }
 .error {
   color: #9b1c1c;
+}
+.spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+button.ghost .spinner {
+  border-color: rgba(16, 32, 51, 0.2);
+  border-top-color: #102033;
+}
+.pin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(16, 32, 51, 0.35);
+}
+.pin-delivery {
+  background: #0f6b4c;
+}
+.pin-courier {
+  background: #1d4ed8;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -6,22 +6,7 @@
     <title>Tu entrega</title>
   </head>
   <body>
-    <div id="app">
-      <header>
-        <p class="eyebrow">Entrega de hoy</p>
-        <h1 id="titulo">Cargando…</h1>
-        <p id="estado" class="pill">—</p>
-      </header>
-      <div id="mapa"></div>
-      <section id="acciones" hidden>
-        <button data-accion="confirmado">Confirmar que estaré</button>
-        <button data-accion="ausente" class="ghost">No voy a estar</button>
-        <button data-accion="reprogramado" class="ghost">Reprogramar</button>
-        <button id="btn-puntos" class="ghost">Punto de recogida cercano</button>
-      </section>
-      <ul id="puntos"></ul>
-      <p id="error" class="error"></p>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

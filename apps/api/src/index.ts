@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { healthRoutes } from "./routes/health.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { clienteRoutes } from "./routes/cliente.js";
+import { trackingRoutes } from "./routes/tracking.js";
 import { repartidorRoutes } from "./routes/repartidor.js";
 import { agenciaRoutes } from "./routes/agencia.js";
 import { registerWs } from "./ws/gateway.js";
@@ -24,6 +25,7 @@ await app.register(rateLimit, {
 await app.register(healthRoutes);
 await app.register(webhookRoutes);
 await app.register(clienteRoutes);
+await app.register(trackingRoutes);
 await app.register(repartidorRoutes);
 await app.register(agenciaRoutes);
 await registerWs(app);
