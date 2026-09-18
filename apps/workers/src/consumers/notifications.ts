@@ -12,10 +12,15 @@ import {
   markApproachNotified,
   nextNotificationChannel,
   type NotificationChannel,
+  type NotificationJobStatus,
 } from "@startup-logistica/shared/ops";
 import { pool } from "../db.js";
 import { firmarTokenCliente } from "../jwt.js";
 import { redis } from "../redis.js";
+import { asChannel, destinationForChannel, planForParada } from "./notification-plan.js";
+import { planResumeErrorRetry } from "./resume-backoff.js";
+
+export { planForParada, asChannel, destinationForChannel };
 
 const publicWebUrl = process.env.PUBLIC_WEB_URL ?? "http://localhost:5173";
 const twilioSid = process.env.TWILIO_ACCOUNT_SID ?? "";
@@ -27,31 +32,74 @@ type SendResult =
   | { ok: true; proveedorMessageId: string; dryRun: boolean }
   | { ok: false; errorCode: string; error: string };
 
+type ProcessOutcome = "sent" | "deferred" | "skipped";
+
+export type NotificationHandleOptions = {
+  now?: Date;
+  resumeJobId?: string;
+};
+
+function eventoTipo(channel: NotificationChannel): "whatsapp" | "sms" | "push_repartidor" {
+  if (channel === "sms") return "sms";
+  if (channel === "app") return "push_repartidor";
+  return "whatsapp";
+}
+
+function eventoProveedor(channel: NotificationChannel): "twilio" | "fcm" {
+  return channel === "app" ? "fcm" : "twilio";
+}
+
+async function loadJobByDedupe(dedupeKey: string): Promise<{
+  id: string;
+  status: NotificationJobStatus;
+  next_retry_at: string | null;
+} | null> {
+  const { rows } = await pool.query<{
+    id: string;
+    status: NotificationJobStatus;
+    next_retry_at: string | null;
+  }>(
+    `SELECT id::text, status, next_retry_at::text
+     FROM notification_jobs
+     WHERE dedupe_key = $1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [dedupeKey],
+  );
+  return rows[0] ?? null;
+}
+
 async function insertJob(opts: {
   paradaId: string;
   orderId: string;
   channel: NotificationChannel;
+  status?: NotificationJobStatus;
   dedupeKey: string;
   fallbackOfJobId?: string | null;
   nextChannel: NotificationChannel | null;
   correlationId: string;
   payload: Record<string, unknown>;
+  nextRetryAt?: Date | null;
+  errorCode?: string | null;
 }): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO notification_jobs (
        parada_id, order_id, channel, status, fallback_of_job_id, next_channel,
-       dedupe_key, correlation_id, payload
-     ) VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8::jsonb)
+       dedupe_key, correlation_id, payload, next_retry_at, error_code
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11)
      RETURNING id::text`,
     [
       opts.paradaId,
       opts.orderId,
       opts.channel,
+      opts.status ?? "pending",
       opts.fallbackOfJobId ?? null,
       opts.nextChannel,
       opts.dedupeKey,
       opts.correlationId,
       JSON.stringify(opts.payload),
+      opts.nextRetryAt?.toISOString() ?? null,
+      opts.errorCode ?? null,
     ],
   );
   return rows[0].id;
@@ -60,9 +108,10 @@ async function insertJob(opts: {
 async function updateJob(
   id: string,
   patch: {
-    status: "sent" | "failed" | "skipped" | "retry";
+    status: NotificationJobStatus;
     errorCode?: string | null;
     payload?: Record<string, unknown>;
+    nextRetryAt?: Date | null;
   },
 ) {
   await pool.query(
@@ -70,9 +119,17 @@ async function updateJob(
      SET status = $2,
          error_code = COALESCE($3, error_code),
          payload = CASE WHEN $4::jsonb IS NULL THEN payload ELSE payload || $4::jsonb END,
+         next_retry_at = CASE WHEN $5::timestamptz IS NULL AND $6::boolean THEN next_retry_at ELSE $5::timestamptz END,
          updated_at = now()
      WHERE id = $1`,
-    [id, patch.status, patch.errorCode ?? null, patch.payload ? JSON.stringify(patch.payload) : null],
+    [
+      id,
+      patch.status,
+      patch.errorCode ?? null,
+      patch.payload ? JSON.stringify(patch.payload) : null,
+      patch.nextRetryAt !== undefined ? patch.nextRetryAt?.toISOString() ?? null : null,
+      patch.nextRetryAt === undefined,
+    ],
   );
 }
 
@@ -152,35 +209,181 @@ async function sendChannel(
     return { ok: false, errorCode: "NO_SMS_PROVIDER", error: "TWILIO_SMS_FROM ausente" };
   }
 
+  if (channel === "app") {
+    if (!to) {
+      return { ok: false, errorCode: "NO_PUSH_TOKEN", error: "sin device_push_token" };
+    }
+    const id = `dryrun-app-${Date.now()}`;
+    console.log("[notif dry-run]", { channel, to, texto });
+    return { ok: true, proveedorMessageId: id, dryRun: true };
+  }
+
   return { ok: false, errorCode: "UNSUPPORTED_CHANNEL", error: `canal ${channel} no soportado` };
 }
 
-async function processChannel(opts: {
+async function recordSkipJob(opts: {
+  parada: Record<string, unknown>;
+  event: NotificationRequested;
+  channel: NotificationChannel;
+  reason: string;
+  fallbackOfJobId?: string | null;
+  payloadBase: Record<string, unknown>;
+}): Promise<void> {
+  const orderId = String(opts.parada.referencia_pedido ?? opts.parada.id);
+  const correlationId = currentCorrelationId() ?? crypto.randomUUID();
+  const dedupeKey = `${opts.parada.id}:${opts.channel}:${opts.event.motivo}`;
+  const existing = await loadJobByDedupe(dedupeKey);
+  if (existing) return;
+  const jobId = await insertJob({
+    paradaId: String(opts.parada.id),
+    orderId,
+    channel: opts.channel,
+    status: "skipped",
+    dedupeKey,
+    fallbackOfJobId: opts.fallbackOfJobId,
+    nextChannel: nextNotificationChannel(opts.channel),
+    correlationId,
+    payload: { ...opts.payloadBase, channel: opts.channel, reason: opts.reason },
+    errorCode: opts.reason.toUpperCase(),
+  });
+  await logOps({
+    level: "info",
+    category: "notification_fallback",
+    event: "notification.skipped",
+    orderId,
+    correlationId,
+    actor: "worker",
+    payload: {
+      channel: opts.channel,
+      next_channel: nextNotificationChannel(opts.channel),
+      dedupe_key: dedupeKey,
+      status: "skipped",
+      reason: opts.reason,
+      job_id: jobId,
+    },
+  });
+}
+
+async function recordDeferredJob(opts: {
+  parada: Record<string, unknown>;
+  event: NotificationRequested;
+  channel: NotificationChannel;
+  nextRetryAt: Date;
+  fallbackOfJobId?: string | null;
+  payloadBase: Record<string, unknown>;
+  resumeJobId?: string;
+}): Promise<void> {
+  const orderId = String(opts.parada.referencia_pedido ?? opts.parada.id);
+  const correlationId = currentCorrelationId() ?? crypto.randomUUID();
+  const dedupeKey = `${opts.parada.id}:${opts.channel}:${opts.event.motivo}`;
+  const payload = {
+    ...opts.payloadBase,
+    channel: opts.channel,
+    reason: "quiet_hours",
+    next_retry_at: opts.nextRetryAt.toISOString(),
+  };
+
+  if (opts.resumeJobId) {
+    await updateJob(opts.resumeJobId, {
+      status: "pending",
+      errorCode: "QUIET_HOURS",
+      payload,
+      nextRetryAt: opts.nextRetryAt,
+    });
+    await logOps({
+      level: "info",
+      category: "notification_fallback",
+      event: "notification.deferred",
+      orderId,
+      correlationId,
+      actor: "worker",
+      payload: {
+        channel: opts.channel,
+        status: "pending",
+        reason: "quiet_hours",
+        next_retry_at: opts.nextRetryAt.toISOString(),
+        job_id: opts.resumeJobId,
+      },
+    });
+    return;
+  }
+
+  const existing = await loadJobByDedupe(dedupeKey);
+  if (existing) return;
+
+  const jobId = await insertJob({
+    paradaId: String(opts.parada.id),
+    orderId,
+    channel: opts.channel,
+    status: "pending",
+    dedupeKey,
+    fallbackOfJobId: opts.fallbackOfJobId,
+    nextChannel: nextNotificationChannel(opts.channel),
+    correlationId,
+    payload,
+    nextRetryAt: opts.nextRetryAt,
+    errorCode: "QUIET_HOURS",
+  });
+  await logOps({
+    level: "info",
+    category: "notification_fallback",
+    event: "notification.deferred",
+    orderId,
+    correlationId,
+    actor: "worker",
+    payload: {
+      channel: opts.channel,
+      next_channel: nextNotificationChannel(opts.channel),
+      dedupe_key: dedupeKey,
+      status: "pending",
+      reason: "quiet_hours",
+      next_retry_at: opts.nextRetryAt.toISOString(),
+      job_id: jobId,
+    },
+  });
+}
+
+async function sendAndPersist(opts: {
   event: NotificationRequested;
   parada: Record<string, unknown>;
   texto: string;
   channel: NotificationChannel;
   fallbackOfJobId?: string | null;
   payloadBase: Record<string, unknown>;
-}): Promise<void> {
+  resumeJobId?: string;
+  now: Date;
+}): Promise<ProcessOutcome> {
   const orderId = String(opts.parada.referencia_pedido ?? opts.parada.id);
   const nextChannel = nextNotificationChannel(opts.channel);
   const correlationId = currentCorrelationId() ?? crypto.randomUUID();
   const dedupeKey = `${opts.parada.id}:${opts.channel}:${opts.event.motivo}`;
-  const jobId = await insertJob({
-    paradaId: String(opts.parada.id),
-    orderId,
-    channel: opts.channel,
-    dedupeKey,
-    fallbackOfJobId: opts.fallbackOfJobId,
-    nextChannel,
-    correlationId,
-    payload: { ...opts.payloadBase, channel: opts.channel },
-  });
+
+  let jobId = opts.resumeJobId;
+  if (!jobId) {
+    const existing = await loadJobByDedupe(dedupeKey);
+    if (existing?.status === "sent") return "sent";
+    if (existing?.status === "skipped" || existing?.status === "failed") {
+      return "skipped";
+    }
+    if (existing?.status === "pending" || existing?.status === "retry") {
+      jobId = existing.id;
+    } else {
+      jobId = await insertJob({
+        paradaId: String(opts.parada.id),
+        orderId,
+        channel: opts.channel,
+        dedupeKey,
+        fallbackOfJobId: opts.fallbackOfJobId,
+        nextChannel,
+        correlationId,
+        payload: { ...opts.payloadBase, channel: opts.channel, body: opts.texto },
+      });
+    }
+  }
 
   const sent = await sendChannel(
     opts.channel,
-    String(opts.parada.cliente_telefono),
+    destinationForChannel(opts.channel, opts.parada),
     opts.texto,
   );
 
@@ -188,15 +391,17 @@ async function processChannel(opts: {
     await updateJob(jobId, {
       status: "sent",
       payload: { proveedorMessageId: sent.proveedorMessageId, dryRun: sent.dryRun },
+      nextRetryAt: null,
     });
     await pool.query(
       `INSERT INTO eventos_notificacion (
          parada_id, tipo, proveedor, proveedor_message_id, payload_enviado, estado_envio, enviado_at
-       ) VALUES ($1, $2, 'twilio', $3, $4::jsonb, 'enviado', now())
+       ) VALUES ($1, $2, $3, $4, $5::jsonb, 'enviado', now())
        ON CONFLICT DO NOTHING`,
       [
         opts.parada.id,
-        opts.channel === "sms" ? "sms" : "whatsapp",
+        eventoTipo(opts.channel),
+        eventoProveedor(opts.channel),
         sent.proveedorMessageId,
         JSON.stringify({ ...opts.payloadBase, channel: opts.channel }),
       ],
@@ -217,13 +422,14 @@ async function processChannel(opts: {
         job_id: jobId,
       },
     });
-    return;
+    return "sent";
   }
 
   await updateJob(jobId, {
     status: "failed",
     errorCode: sent.errorCode,
     payload: { error: sent.error },
+    nextRetryAt: null,
   });
   await logOps({
     level: nextChannel ? "warn" : "error",
@@ -244,15 +450,141 @@ async function processChannel(opts: {
   });
 
   if (nextChannel) {
-    await processChannel({
-      ...opts,
+    return processChannel({
+      event: opts.event,
+      parada: opts.parada,
+      texto: opts.texto,
       channel: nextChannel,
       fallbackOfJobId: jobId,
+      payloadBase: opts.payloadBase,
+      now: opts.now,
     });
   }
+  return "skipped";
 }
 
-export async function handleNotification(event: NotificationRequested) {
+async function processChannel(opts: {
+  event: NotificationRequested;
+  parada: Record<string, unknown>;
+  texto: string;
+  channel: NotificationChannel;
+  fallbackOfJobId?: string | null;
+  payloadBase: Record<string, unknown>;
+  resumeJobId?: string;
+  now: Date;
+}): Promise<ProcessOutcome> {
+  const plan = planForParada(opts.parada, { ...opts.event, channel: opts.channel }, opts.now);
+
+  for (const skip of plan.skipped) {
+    await recordSkipJob({
+      parada: opts.parada,
+      event: opts.event,
+      channel: skip.channel,
+      reason: skip.reason,
+      fallbackOfJobId: opts.fallbackOfJobId,
+      payloadBase: opts.payloadBase,
+    });
+  }
+
+  if (plan.action === "skip") {
+    if (opts.resumeJobId) {
+      await updateJob(opts.resumeJobId, {
+        status: "skipped",
+        errorCode: plan.reason.toUpperCase(),
+        payload: { reason: plan.reason },
+        nextRetryAt: null,
+      });
+    }
+    return "skipped";
+  }
+
+  if (plan.action === "defer") {
+    const sameChannel = plan.channel === opts.channel;
+    await recordDeferredJob({
+      parada: opts.parada,
+      event: opts.event,
+      channel: plan.channel,
+      nextRetryAt: plan.nextRetryAt,
+      fallbackOfJobId: sameChannel ? opts.fallbackOfJobId : opts.resumeJobId ?? opts.fallbackOfJobId,
+      payloadBase: { ...opts.payloadBase, body: opts.texto },
+      resumeJobId: sameChannel ? opts.resumeJobId : undefined,
+    });
+    if (opts.resumeJobId && !sameChannel) {
+      await updateJob(opts.resumeJobId, {
+        status: "skipped",
+        errorCode: "FALLBACK_CHANNEL",
+        payload: { reason: "plan_moved_channel", to: plan.channel },
+        nextRetryAt: null,
+      });
+    }
+    return "deferred";
+  }
+
+  const sameChannel = plan.channel === opts.channel;
+  if (opts.resumeJobId && !sameChannel) {
+    await updateJob(opts.resumeJobId, {
+      status: "skipped",
+      errorCode: "FALLBACK_CHANNEL",
+      payload: { reason: "plan_moved_channel", to: plan.channel },
+      nextRetryAt: null,
+    });
+  }
+  return sendAndPersist({
+    ...opts,
+    channel: plan.channel,
+    fallbackOfJobId: sameChannel ? opts.fallbackOfJobId : opts.resumeJobId ?? opts.fallbackOfJobId,
+    resumeJobId: sameChannel ? opts.resumeJobId : undefined,
+  });
+}
+
+async function finalizeSuccessfulNotification(opts: {
+  event: NotificationRequested;
+  parada: Record<string, unknown>;
+  texto: string;
+  plantilla: PlantillaId;
+}): Promise<void> {
+  if (
+    opts.event.motivo === "proximidad_geocerca" ||
+    opts.event.motivo === "faltan_n_paradas" ||
+    opts.event.motivo === "manual"
+  ) {
+    await markApproachNotified(pool, { paradaId: String(opts.parada.id) });
+  }
+
+  if (opts.parada.estado === "pendiente" && opts.event.motivo !== "entrega_confirmada") {
+    assertTransicion("pendiente", "notificado");
+    await pool.query(
+      `UPDATE paradas SET estado = 'notificado' WHERE id = $1 AND estado = 'pendiente'`,
+      [opts.parada.id],
+    );
+    await logOps({
+      level: "info",
+      category: "delivery_status",
+      event: "delivery_status.changed",
+      orderId: String(opts.parada.referencia_pedido ?? opts.parada.id),
+      actor: "worker",
+      payload: { from: "pendiente", to: "notificado", motivo: opts.event.motivo },
+    });
+  }
+
+  await redis.publish(
+    repartidorChannel(String(opts.parada.repartidor_id)),
+    JSON.stringify({
+      tipo: "cliente_notificado",
+      paradaId: opts.parada.id,
+      motivo: opts.event.motivo,
+      plantilla: opts.plantilla,
+      body: opts.texto,
+      dryRun: !(twilioSid && twilioToken && twilioFrom),
+    }),
+  );
+}
+
+export async function handleNotification(
+  event: NotificationRequested,
+  opts: NotificationHandleOptions = {},
+) {
+  const now = opts.now ?? new Date();
   const { rows } = await pool.query(
     `SELECT p.*, r.agencia_id, r.repartidor_id,
             a.nombre AS nombre_empresa,
@@ -261,6 +593,7 @@ export async function handleNotification(event: NotificationRequested) {
             a.email_soporte,
             rp.nombre AS nombre_conductor,
             rp.matricula,
+            rp.device_push_token,
             (SELECT count(*) FROM paradas px WHERE px.ruta_id = p.ruta_id) AS total_paradas
      FROM paradas p
      JOIN rutas r ON r.id = p.ruta_id
@@ -269,7 +602,7 @@ export async function handleNotification(event: NotificationRequested) {
      WHERE p.id = $1`,
     [event.paradaId],
   );
-  const parada = rows[0];
+  const parada = rows[0] as Record<string, unknown> | undefined;
   if (!parada) return;
 
   if (
@@ -291,12 +624,20 @@ export async function handleNotification(event: NotificationRequested) {
         estado: parada.estado,
       },
     });
+    if (opts.resumeJobId) {
+      await updateJob(opts.resumeJobId, {
+        status: "skipped",
+        errorCode: "ESTADO_NO_PENDIENTE",
+        payload: { reason: "estado_no_pendiente", estado: parada.estado },
+        nextRetryAt: null,
+      });
+    }
     return;
   }
 
   let token = parada.token_acceso as string | null;
   if (!token) {
-    token = firmarTokenCliente(parada.id, parada.agencia_id);
+    token = firmarTokenCliente(String(parada.id), String(parada.agencia_id));
     await pool.query(
       `UPDATE paradas
        SET token_acceso = $2, token_expira_at = now() + interval '48 hours'
@@ -308,12 +649,12 @@ export async function handleNotification(event: NotificationRequested) {
   const plantilla: PlantillaId = plantillaParaMotivo(event.motivo);
   const minutos = event.minutosRestantes ?? (event.paradasRestantes ?? 3) * 4;
   const eta = event.eta ??
-    new Date(Date.now() + minutos * 60_000).toLocaleTimeString("es-ES", {
+    now.toLocaleTimeString("es-ES", {
       hour: "2-digit",
       minute: "2-digit",
       timeZone: "Europe/Madrid",
     });
-  const horaEntrega = new Date().toLocaleTimeString("es-ES", {
+  const horaEntrega = now.toLocaleTimeString("es-ES", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Madrid",
@@ -321,74 +662,115 @@ export async function handleNotification(event: NotificationRequested) {
   const enlace = `${publicWebUrl}/?token=${encodeURIComponent(token)}`;
 
   const texto = renderPlantilla(plantilla, {
-    nombre_contacto: parada.cliente_nombre,
-    nombre_empresa: parada.nombre_empresa,
-    referencia_pedido: parada.referencia_pedido ?? parada.id,
-    direccion_entrega: parada.direccion_texto,
-    nombre_conductor: parada.nombre_conductor,
-    matricula: parada.matricula ?? parada.vehiculo ?? "—",
+    nombre_contacto: parada.cliente_nombre as string,
+    nombre_empresa: parada.nombre_empresa as string,
+    referencia_pedido: (parada.referencia_pedido as string | null) ?? String(parada.id),
+    direccion_entrega: parada.direccion_texto as string,
+    nombre_conductor: parada.nombre_conductor as string,
+    matricula: (parada.matricula as string | null) ?? (parada.vehiculo as string | null) ?? "—",
     enlace_tracking: enlace,
-    nombre_saas: parada.nombre_saas,
-    numero_parada: parada.orden,
-    total_paradas: parada.total_paradas,
+    nombre_saas: parada.nombre_saas as string,
+    numero_parada: parada.orden as number,
+    total_paradas: parada.total_paradas as number,
     eta,
     minutos_restantes: minutos,
-    telefono_soporte: parada.telefono_soporte,
+    telefono_soporte: parada.telefono_soporte as string,
     hora_entrega: horaEntrega,
-    nombre_receptor: parada.receptor_nombre ?? parada.cliente_nombre,
-    enlace_pod: parada.enlace_pod ?? enlace,
-    email_soporte: parada.email_soporte,
+    nombre_receptor: (parada.receptor_nombre as string | null) ?? (parada.cliente_nombre as string),
+    enlace_pod: (parada.enlace_pod as string | null) ?? enlace,
+    email_soporte: parada.email_soporte as string,
   });
 
   const payload = {
     to: parada.cliente_telefono,
     motivo: event.motivo,
     plantilla,
+    body: texto,
   };
 
-  await processChannel({
+  const outcome = await processChannel({
     event,
     parada,
     texto,
-    channel: event.channel ?? "whatsapp",
+    channel: asChannel(event.channel),
     fallbackOfJobId: event.fallbackOfJobId ?? null,
     payloadBase: payload,
+    resumeJobId: opts.resumeJobId,
+    now,
   });
 
-  if (
-    event.motivo === "proximidad_geocerca" ||
-    event.motivo === "faltan_n_paradas" ||
-    event.motivo === "manual"
-  ) {
-    await markApproachNotified(pool, { paradaId: parada.id });
+  if (outcome === "sent") {
+    await finalizeSuccessfulNotification({ event, parada, texto, plantilla });
   }
-
-  if (parada.estado === "pendiente" && event.motivo !== "entrega_confirmada") {
-    assertTransicion("pendiente", "notificado");
-    await pool.query(
-      `UPDATE paradas SET estado = 'notificado' WHERE id = $1 AND estado = 'pendiente'`,
-      [parada.id],
-    );
-    await logOps({
-      level: "info",
-      category: "delivery_status",
-      event: "delivery_status.changed",
-      orderId: String(parada.referencia_pedido ?? parada.id),
-      actor: "worker",
-      payload: { from: "pendiente", to: "notificado", motivo: event.motivo },
-    });
-  }
-
-  await redis.publish(
-    repartidorChannel(parada.repartidor_id),
-    JSON.stringify({
-      tipo: "cliente_notificado",
-      paradaId: parada.id,
-      motivo: event.motivo,
-      plantilla,
-      body: texto,
-      dryRun: !(twilioSid && twilioToken && twilioFrom),
-    }),
+  console.log(
+    `[notif] ${plantilla} parada=${parada.id} motivo=${event.motivo} outcome=${outcome}`,
   );
-  console.log(`[notif] ${plantilla} parada=${parada.id} motivo=${event.motivo}`);
+}
+
+export async function processDueNotificationJobs(now = new Date()): Promise<number> {
+  const { rows } = await pool.query<{
+    id: string;
+    parada_id: string;
+    channel: string;
+    payload: Record<string, unknown>;
+    fallback_of_job_id: string | null;
+  }>(
+    `WITH due AS (
+       SELECT id
+       FROM notification_jobs
+       WHERE status = 'pending'
+         AND next_retry_at IS NOT NULL
+         AND next_retry_at <= $1::timestamptz
+       ORDER BY next_retry_at ASC
+       LIMIT 50
+       FOR UPDATE SKIP LOCKED
+     )
+     UPDATE notification_jobs AS j
+     SET status = 'retry', updated_at = now()
+     FROM due
+     WHERE j.id = due.id
+     RETURNING j.id::text, j.parada_id::text, j.channel, j.payload, j.fallback_of_job_id::text`,
+    [now.toISOString()],
+  );
+
+  for (const job of rows) {
+    const payload = job.payload ?? {};
+    const event: NotificationRequested = {
+      type: "NOTIFICATION_REQUESTED",
+      paradaId: job.parada_id,
+      motivo: (payload.motivo as NotificationRequested["motivo"]) ?? "manual",
+      channel: asChannel(job.channel),
+      fallbackOfJobId: job.fallback_of_job_id ?? undefined,
+      eta: typeof payload.eta === "string" ? payload.eta : undefined,
+    };
+    try {
+      await handleNotification(event, { now, resumeJobId: job.id });
+    } catch (err) {
+      console.error(`[notif] resume job=${job.id}`, err);
+      const decision = planResumeErrorRetry(payload.resume_attempts, now);
+      if (decision.status === "failed") {
+        await updateJob(job.id, {
+          status: "failed",
+          errorCode: "RESUME_ERROR",
+          payload: {
+            error: String(err),
+            resume_attempts: decision.attempt,
+          },
+          nextRetryAt: null,
+        });
+        continue;
+      }
+      await updateJob(job.id, {
+        status: "pending",
+        errorCode: "RESUME_ERROR",
+        payload: {
+          error: String(err),
+          resume_attempts: decision.attempt,
+          next_retry_at: decision.nextRetryAt.toISOString(),
+        },
+        nextRetryAt: decision.nextRetryAt,
+      });
+    }
+  }
+  return rows.length;
 }

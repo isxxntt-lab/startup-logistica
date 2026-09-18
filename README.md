@@ -49,7 +49,7 @@ flowchart LR
 | Destinatario | SPA sin login. Lee **solo** `?token=` (nunca `localStorage`). Mapa Leaflet en poll 8s + **Estaré ahí** / **Reprogramar**. |
 | Agencia / ops | API key `x-api-key`. Dashboard, tokens de parada, `/api/ops` (health, logs, métricas, checks). |
 | Repartidor | Pings GPS, ruta de hoy, marcar entregado/ausente. Canal Redis en tiempo real. HTTP y WS exigen API key de agencia (`x-api-key`). |
-| Workers | Consumer groups sobre streams: notificaciones (WhatsApp→SMS), geocerca, progreso de ruta, webhooks. |
+| Workers | Consumer groups sobre streams: notificaciones (WhatsApp→SMS, quiet hours 22:00–08:00 Europe/Madrid, consentimiento por canal), geocerca, progreso de ruta, webhooks. |
 | Shared | Tipos, FSM de paradas, contratos de tracking y ops. Subpaths: `@startup-logistica/shared/tracking` y `@startup-logistica/shared/ops`. |
 
 ### Monorepo
@@ -58,7 +58,7 @@ flowchart LR
 |---|---|
 | `packages/shared` | Tipos, streams, máquina de estados de `paradas`, tracking, ops |
 | `apps/api` | HTTP + WebSocket + encolado. Tracking del destinatario y `/api/ops` |
-| `apps/workers` | Consumer groups Redis: notificaciones, webhooks, geocerca `ST_DWithin`, progreso de ruta |
+| `apps/workers` | Consumer groups Redis: notificaciones (quiet hours + consentimiento), webhooks, geocerca `ST_DWithin`, progreso de ruta |
 | `apps/web-cliente` | SPA Vite + React + Leaflet (`?token=`) |
 | `apps/web-repartidor` | Simulador GPS / WS (puerto 5174) |
 | `apps/web-dashboard` | Vista de KPIs (puerto 5175) |
@@ -114,10 +114,18 @@ Variables relevantes (ver `.env.example`):
 | `OPS_TOKEN` | Auth alternativa a la API key para cron de ops (`x-ops-token`) |
 | `OPS_CHECKS_INTERVAL_MS` | Periodo del evaluador de alertas (0 lo desactiva; por defecto 120s) |
 | Twilio / Meta / FCM / R2 | Opcionales. Sin Twilio las notificaciones van en **dry-run** (consola + `eventos_notificacion` / `notification_jobs`) |
+| `NOTIFICATION_RETRY_POLL_MS` | Poll del worker para jobs aplazados por quiet hours (por defecto 30s; `0` lo desactiva) |
 
 ## Pruebas
 
-Con Postgres y Redis arriba (`docker compose up -d`):
+Quiet hours / consentimiento (shared + workers) **no necesitan VPS, Postgres ni Redis**:
+
+```bash
+pnpm --filter @startup-logistica/shared test
+pnpm --filter @startup-logistica/workers test
+```
+
+El resto del workspace, con Postgres y Redis arriba (`docker compose up -d`):
 
 ```bash
 pnpm test
@@ -127,6 +135,8 @@ Eso ejecuta `pnpm -r --if-present run test` en el workspace:
 
 | Paquete | Qué cubre |
 |---|---|
+| `packages/shared` | Quiet hours Europe/Madrid 22:00–08:00, consentimiento y fallback WA→SMS (`notification-policy.test.ts`). **No necesita VPS, Postgres ni Redis.** |
+| `apps/workers` | `planForParada` (aplazar WA/SMS de noche, push, skip sin consentimiento) y backoff de `RESUME_ERROR` 30s→2m→10m / `failed` al 4.º (`notifications-plan.test.ts`, `resume-backoff.test.ts`). **No necesita VPS.** |
 | `apps/api` | Unitarias del gate de token (`tracking-gate.test.ts`), auth HTTP/WS de repartidor (`auth-repartidor.test.ts`, `ws/auth.test.ts`) e **integrales** de ops contra PostGIS (`ops.test.ts`: logs con `correlation_id`, alertas idempotentes, métricas de failure avoided y dwell) |
 | `apps/web-cliente` | Cliente HTTP de tracking, 410 `gone`, y que **Estaré ahí** / **Reprogramar** llaman a endpoints distintos |
 
@@ -177,6 +187,16 @@ Los 410 de tracking se registran en ops con **prefijo/hash del token**, nunca el
 Compatibilidad: siguen existiendo `/cliente/parada`, `/cliente/confirm-presence` y `/cliente/reschedule`.
 
 Estructura del front: `page.tsx`, `TrackingShell`, `TrackingMap`, `ActionPanel`, `StatusBanner`, `TokenErrorView`, hooks `useTrackingToken` / `useCourierPositions` / `useRecipientActions`, `lib/tracking-api.ts`, `types/tracking.ts`.
+
+## Notificaciones (worker)
+
+El consumer de `stream:notifications` persiste cada intento en `notification_jobs` y aplica, en este orden:
+
+1. **Consentimiento** (`paradas.consent_whatsapp` / `consent_sms` / `consent_push`). `NULL` o `false` = no consta. Ese canal se marca `skipped`; si el siguiente de la cadena **WhatsApp → SMS** tiene consentimiento y está disponible, se usa (un solo envío, no los dos).
+2. **Canal disponible** (teléfono / token push / `TWILIO_*`). Si Twilio está configurado pero falta `TWILIO_SMS_FROM`, SMS no se usa.
+3. **Quiet hours** `Europe/Madrid` **22:00–08:00**: WhatsApp, SMS y llamada se aplazan (`status=pending`, `error_code=QUIET_HOURS`, `next_retry_at` = próximas 08:00). **Push (`app`) sí se envía.** No se hace fallback WA→SMS de noche para no despertar. El worker reanuda jobs aplazados con un poll (`NOTIFICATION_RETRY_POLL_MS`, 30s). Hasta que no hay envío real la parada **no** pasa a `notificado`. Un `RESUME_ERROR` no deja el job en `pending` con `next_retry_at` ya vencido: backoff **30s → 2m → 10m** y `failed` al cuarto intento.
+
+`POST /agencia/rutas/:rutaId/paradas` acepta `consent_whatsapp`, `consent_sms` y `consent_push` opcionales. Las paradas seed de demo tienen consentimiento a `true`.
 
 ## Módulo ops (logs, alertas, métricas)
 
@@ -244,7 +264,7 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 | `Caddyfile` | TLS y reverse proxy |
 | `.env.production.example` | Plantilla de secretos (no commitear valores reales) |
 | `deploy/SECURITY_CHECKLIST.md` | Checklist de endurecimiento |
-| `deploy/MERGE_ORDER.md` | Orden #4→#10, qué verifica Grey, rebase de #9, VPS ≠ código |
+| `deploy/MERGE_ORDER.md` | Orden #4→#11, #9 rebaseado sobre #11, qué verifica Grey, VPS ≠ código |
 | `deploy/DEPLOY_PLAN_MANANA.md` | Pasos de go-live |
 | `deploy/BACKUP_RESTORE.md` | Backup/restore PostGIS: frecuencia, retención, dry-run en staging |
 | `scripts/prod-healthcheck.sh` | Smoke `/health`, ops y SPA |

@@ -306,11 +306,13 @@ describe("docker compose config (si hay binario)", () => {
 });
 
 describe("orden de merge y operacional VPS", () => {
-  it("MERGE_ORDER documenta #4→#10, rebase de #9 y que el VPS no es diff", () => {
+  it("MERGE_ORDER documenta #4→#11, #9 rebaseado sobre #11 y que el VPS no es diff", () => {
     const src = readFileSync(join(root, "deploy", "MERGE_ORDER.md"), "utf8");
-    assert.match(src, /#4 → #5 → #6 → #7 → #8 → #9 → #10/);
-    assert.match(src, /#9 no incluye #8 ni #10/);
-    assert.match(src, /Rebase #9 sobre ese head/);
+    assert.match(src, /#4 → #5 → #6 → #7 → #8 → #10 → #11/);
+    assert.match(src, /#9 rebaseado/);
+    assert.match(src, /incluye.*#8.*#10.*#11/s);
+    assert.match(src, /RESUME_ERROR/);
+    assert.match(src, /30s → 2m → 10m/);
     assert.match(src, /COPY --from=build --chown=101:101/);
     assert.match(src, /Operacional en el VPS — no es código/);
     assert.match(src, /ACME_EMAIL/);
