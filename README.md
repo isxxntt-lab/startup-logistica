@@ -245,7 +245,10 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 | `.env.production.example` | Plantilla de secretos (no commitear valores reales) |
 | `deploy/SECURITY_CHECKLIST.md` | Checklist de endurecimiento |
 | `deploy/DEPLOY_PLAN_MANANA.md` | Pasos de go-live |
+| `deploy/BACKUP_RESTORE.md` | Backup/restore PostGIS: frecuencia, retención, dry-run en staging |
 | `scripts/prod-healthcheck.sh` | Smoke `/health`, ops y SPA |
+| `scripts/backup-postgres.sh` | `pg_dump` con timestamp (`.env.production`) |
+| `scripts/restore-postgres.sh` | Restore destructivo (`CONFIRM=yes`) |
 
 ```bash
 cp .env.production.example .env.production
