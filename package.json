@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @startup-logistica/api dev",
     "dev:workers": "pnpm --filter @startup-logistica/workers dev",
     "dev:web": "pnpm --filter @startup-logistica/web-cliente dev",
+    "test": "pnpm -r --if-present run test",
     "dev:repartidor": "pnpm --filter @startup-logistica/web-repartidor dev",
     "dev:dashboard": "pnpm --filter @startup-logistica/web-dashboard dev",
     "demo:geocerca": "pnpm --filter @startup-logistica/api demo:geocerca",

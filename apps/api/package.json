@@ -8,7 +8,8 @@
     "start": "tsx --env-file ../../.env src/index.ts",
     "demo:geocerca": "tsx --env-file ../../.env src/scripts/demo-geocerca.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "test": "tsx --test src/tracking-gate.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

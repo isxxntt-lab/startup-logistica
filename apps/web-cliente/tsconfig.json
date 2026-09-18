@@ -5,7 +5,11 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "lib": ["ES2022", "DOM"]
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }
