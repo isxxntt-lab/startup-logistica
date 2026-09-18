@@ -2,6 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   assertTransicion,
+  logOps,
+  markRecipientResponse,
+  tokenFingerprint,
   type EstadoParada,
 } from "@startup-logistica/shared";
 import { pool } from "../db.js";
@@ -16,15 +19,41 @@ const respuestaSchema = z.object({
   ventana_alternativa: z.string().optional(),
 });
 
+class ClienteAuthError extends Error {
+  statusCode: number;
+  reason: "missing" | "invalid" | "revoked" | "expired";
+  fingerprint?: { tokenPrefix: string; tokenHash: string };
+  constructor(
+    message: string,
+    statusCode: number,
+    reason: ClienteAuthError["reason"],
+    fingerprint?: { tokenPrefix: string; tokenHash: string },
+  ) {
+    super(message);
+    this.statusCode = statusCode;
+    this.reason = reason;
+    this.fingerprint = fingerprint;
+  }
+}
+
 async function autenticarCliente(token: string | undefined) {
   if (!token) {
-    throw Object.assign(new Error("token requerido"), { statusCode: 401 });
+    throw new ClienteAuthError("token requerido", 401, "missing");
   }
+  const fingerprint = tokenFingerprint(token);
   const agenciaId = peekAgenciaId(token);
   if (!agenciaId) {
-    throw Object.assign(new Error("token inválido"), { statusCode: 401 });
+    throw new ClienteAuthError("token inválido", 401, "invalid", fingerprint);
   }
-  verificarTokenCliente(token, agenciaId);
+  try {
+    verificarTokenCliente(token, agenciaId);
+  } catch (err) {
+    const name = (err as { name?: string }).name;
+    if (name === "TokenExpiredError") {
+      throw new ClienteAuthError("token caducado", 410, "expired", fingerprint);
+    }
+    throw new ClienteAuthError("token inválido", 401, "invalid", fingerprint);
+  }
 
   const { rows } = await pool.query(
     `SELECT p.*, r.repartidor_id, r.agencia_id,
@@ -37,12 +66,122 @@ async function autenticarCliente(token: string | undefined) {
   );
   const parada = rows[0];
   if (!parada) {
-    throw Object.assign(new Error("token revocado"), { statusCode: 401 });
+    throw new ClienteAuthError("token revocado", 410, "revoked", fingerprint);
   }
   if (parada.token_expira_at && new Date(parada.token_expira_at) < new Date()) {
-    throw Object.assign(new Error("token caducado"), { statusCode: 401 });
+    throw new ClienteAuthError("token caducado", 410, "expired", fingerprint);
   }
   return parada;
+}
+
+async function logTrackingAuthError(err: unknown) {
+  if (!(err instanceof ClienteAuthError)) return;
+  if (err.reason === "missing") return;
+  await logOps({
+    level: err.statusCode === 410 ? "info" : "warn",
+    category: "tracking_token",
+    event: "tracking.token_rejected",
+    actor: "api",
+    payload: {
+      reason: err.reason,
+      statusCode: err.statusCode,
+      tokenPrefix: err.fingerprint?.tokenPrefix,
+      tokenHash: err.fingerprint?.tokenHash,
+    },
+  });
+}
+
+function clienteErrorStatus(err: unknown): number {
+  if (err instanceof ClienteAuthError) return err.statusCode;
+  if ((err as { name?: string }).name === "TransicionParadaInvalida") return 409;
+  return (err as { statusCode?: number }).statusCode ?? 400;
+}
+
+async function aplicarRespuestaCliente(
+  parada: Record<string, unknown>,
+  data: z.infer<typeof respuestaSchema>,
+) {
+  const hacia = data.accion as EstadoParada;
+  assertTransicion(parada.estado as EstadoParada, hacia);
+  const from = String(parada.estado);
+  const orderId = String(parada.referencia_pedido ?? parada.id);
+
+  await pool.query(
+    `UPDATE paradas
+     SET estado = $2,
+         notas_cliente = COALESCE($3, notas_cliente),
+         punto_recogida_id = COALESCE($4, punto_recogida_id)
+     WHERE id = $1`,
+    [
+      parada.id,
+      hacia,
+      data.notas ?? null,
+      data.punto_recogida_id ?? null,
+    ],
+  );
+
+  const recipientStatus =
+    hacia === "confirmado"
+      ? "confirmed"
+      : hacia === "reprogramado" || hacia === "reasignado"
+        ? "rescheduled"
+        : hacia === "ausente"
+          ? "absent"
+          : null;
+  if (recipientStatus) {
+    await markRecipientResponse(pool, {
+      paradaId: String(parada.id),
+      recipientStatus,
+      closeAttempt: recipientStatus === "rescheduled",
+    });
+  }
+
+  await logOps({
+    level: "info",
+    category: "delivery_status",
+    event: "delivery_status.changed",
+    orderId,
+    actor: "cliente",
+    payload: { from, to: hacia },
+  });
+
+  if (hacia === "confirmado") {
+    await logOps({
+      level: "info",
+      category: "tracking_token",
+      event: "tracking.confirm_presence",
+      orderId,
+      actor: "cliente",
+      payload: { from, to: hacia },
+    });
+  }
+  if (hacia === "reprogramado" || hacia === "reasignado") {
+    await logOps({
+      level: "info",
+      category: "tracking_token",
+      event: "tracking.reschedule",
+      orderId,
+      actor: "cliente",
+      payload: {
+        from,
+        to: hacia,
+        ventana_alternativa: data.ventana_alternativa ?? null,
+      },
+    });
+  }
+
+  const payload = JSON.stringify({
+    tipo: "cliente_respuesta",
+    paradaId: parada.id,
+    accion: hacia,
+    ventana_alternativa: data.ventana_alternativa ?? null,
+  });
+  await redisPub.publish(
+    repartidorChannel(String(parada.repartidor_id)),
+    payload,
+  );
+
+  return { ok: true, estado: hacia };
 }
 
 export async function clienteRoutes(app: FastifyInstance) {
@@ -63,7 +202,8 @@ export async function clienteRoutes(app: FastifyInstance) {
         notas_cliente: parada.notas_cliente,
       };
     } catch (err) {
-      const status = (err as { statusCode?: number }).statusCode ?? 401;
+      await logTrackingAuthError(err);
+      const status = clienteErrorStatus(err);
       return reply.code(status).send({ error: (err as Error).message });
     }
   });
@@ -89,7 +229,8 @@ export async function clienteRoutes(app: FastifyInstance) {
       );
       return { puntos: rows };
     } catch (err) {
-      const status = (err as { statusCode?: number }).statusCode ?? 401;
+      await logTrackingAuthError(err);
+      const status = clienteErrorStatus(err);
       return reply.code(status).send({ error: (err as Error).message });
     }
   });
@@ -105,41 +246,43 @@ export async function clienteRoutes(app: FastifyInstance) {
     }
     try {
       const parada = await autenticarCliente(token);
-      const hacia = parsed.data.accion as EstadoParada;
-      assertTransicion(parada.estado, hacia);
-
-      await pool.query(
-        `UPDATE paradas
-         SET estado = $2,
-             notas_cliente = COALESCE($3, notas_cliente),
-             punto_recogida_id = COALESCE($4, punto_recogida_id)
-         WHERE id = $1`,
-        [
-          parada.id,
-          hacia,
-          parsed.data.notas ?? null,
-          parsed.data.punto_recogida_id ?? null,
-        ],
-      );
-
-      const payload = JSON.stringify({
-        tipo: "cliente_respuesta",
-        paradaId: parada.id,
-        accion: hacia,
-        ventana_alternativa: parsed.data.ventana_alternativa ?? null,
-      });
-      await redisPub.publish(
-        repartidorChannel(parada.repartidor_id),
-        payload,
-      );
-
-      return { ok: true, estado: hacia };
+      return await aplicarRespuestaCliente(parada, parsed.data);
     } catch (err) {
-      const status =
-        (err as { name?: string }).name === "TransicionParadaInvalida"
-          ? 409
-          : ((err as { statusCode?: number }).statusCode ?? 400);
-      return reply.code(status).send({ error: (err as Error).message });
+      await logTrackingAuthError(err);
+      return reply.code(clienteErrorStatus(err)).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/cliente/confirm-presence", async (request, reply) => {
+    const token =
+      (request.headers.authorization?.replace(/^Bearer\s+/i, "") as
+        | string
+        | undefined) || (request.query as { token?: string }).token;
+    try {
+      const parada = await autenticarCliente(token);
+      return await aplicarRespuestaCliente(parada, { accion: "confirmado" });
+    } catch (err) {
+      await logTrackingAuthError(err);
+      return reply.code(clienteErrorStatus(err)).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/cliente/reschedule", async (request, reply) => {
+    const token =
+      (request.headers.authorization?.replace(/^Bearer\s+/i, "") as
+        | string
+        | undefined) || (request.query as { token?: string }).token;
+    const body = (request.body ?? {}) as { ventana_alternativa?: string; notas?: string };
+    try {
+      const parada = await autenticarCliente(token);
+      return await aplicarRespuestaCliente(parada, {
+        accion: "reprogramado",
+        ventana_alternativa: body.ventana_alternativa,
+        notas: body.notas,
+      });
+    } catch (err) {
+      await logTrackingAuthError(err);
+      return reply.code(clienteErrorStatus(err)).send({ error: (err as Error).message });
     }
   });
 }

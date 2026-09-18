@@ -7,9 +7,10 @@
     "dev": "tsx watch --env-file ../../.env src/index.ts",
     "start": "tsx --env-file ../../.env src/index.ts",
     "demo:geocerca": "tsx --env-file ../../.env src/scripts/demo-geocerca.ts",
+    "ops:checks": "tsx --env-file ../../.env src/scripts/run-ops-checks.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
-    "test": "tsx --test src/tracking-gate.test.ts"
+    "test": "tsx --env-file ../../.env --test src/tracking-gate.test.ts src/lib/ops/ops.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

@@ -1,5 +1,8 @@
 import {
   STREAMS,
+  closeAttemptDwell,
+  ensureOpenAttempt,
+  logOps,
   type LocationUpdated,
   type NotificationRequested,
   serializeEvent,
@@ -93,6 +96,19 @@ export async function handleGeofence(event: LocationUpdated) {
           dwellSeconds,
         ],
       );
+      await closeAttemptDwell(pool, {
+        paradaId: siguiente.id,
+        dwellSeconds,
+        closedBy: "exited",
+      });
+      await logOps({
+        level: "info",
+        category: "geofence",
+        event: "geofence.exited",
+        orderId,
+        actor: event.repartidorId,
+        payload: { from: "entered", to: "exited", dwellSeconds, paradaId: siguiente.id },
+      });
       console.log(`[geofence] exited parada=${siguiente.id} dwell=${dwellSeconds}s`);
     } else {
       console.log(
@@ -117,6 +133,19 @@ export async function handleGeofence(event: LocationUpdated) {
         at,
       ],
     );
+    await ensureOpenAttempt(pool, {
+      paradaId: siguiente.id,
+      at,
+      orderId,
+    });
+    await logOps({
+      level: "info",
+      category: "geofence",
+      event: "geofence.entered",
+      orderId,
+      actor: event.repartidorId,
+      payload: { from: "outside", to: "entered", paradaId: siguiente.id, distanceM },
+    });
 
     if (siguiente.estado === "pendiente") {
       const notif: NotificationRequested = {
@@ -156,6 +185,14 @@ export async function handleGeofence(event: LocationUpdated) {
         dwellSeconds,
       ],
     );
+    await logOps({
+      level: "info",
+      category: "geofence",
+      event: "geofence.at_delivery",
+      orderId,
+      actor: event.repartidorId,
+      payload: { from: "entered", to: "at_delivery", paradaId: siguiente.id, dwellSeconds },
+    });
     console.log(`[geofence] at_delivery parada=${siguiente.id} dwell=${dwellSeconds}s`);
   }
 }

@@ -7,6 +7,10 @@ import {
   type EstadoParada,
 } from "@startup-logistica/shared";
 import { toLocationUpdated } from "../location.js";
+import {
+  completeOpenAttempt,
+  logOps,
+} from "@startup-logistica/shared";
 
 const ubicacionSchema = z.object({
   event: z.literal("location_update").optional(),
@@ -184,8 +188,10 @@ export async function repartidorRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: (err as Error).message });
     }
 
+    const fromEstado = parada.estado as EstadoParada;
     const failureAvoided = body.data.estado === "entregado" &&
       ["notificado", "confirmado"].includes(parada.estado);
+    const orderId = parada.referencia_pedido ?? paradaId;
 
     await pool.query(
       `UPDATE paradas
@@ -216,10 +222,6 @@ export async function repartidorRoutes(app: FastifyInstance) {
       ],
     );
 
-    const { rows: n } = await pool.query(
-      `SELECT coalesce(max(attempt_number), 0) + 1 AS n FROM delivery_attempts WHERE parada_id = $1`,
-      [paradaId],
-    );
     const { rows: dwell } = await pool.query(
       `SELECT dwell_seconds FROM geofence_events
        WHERE parada_id = $1 AND dwell_seconds IS NOT NULL
@@ -227,27 +229,33 @@ export async function repartidorRoutes(app: FastifyInstance) {
       [paradaId],
     );
 
-    await pool.query(
-      `INSERT INTO delivery_attempts (
-         parada_id, attempt_number, completed_at, status, failure_reason,
-         failure_avoided, avoidance_channel, geofence_dwell_seconds
-       ) VALUES ($1,$2,now(),$3,$4,$5,$6,$7)`,
-      [
-        paradaId,
-        n[0].n,
-        body.data.estado === "entregado"
-          ? "delivered"
-          : body.data.estado === "ausente"
-            ? "failed"
-            : "rescheduled",
+    const attemptStatus =
+      body.data.estado === "entregado"
+        ? "delivered"
+        : body.data.estado === "ausente"
+          ? "failed"
+          : "rescheduled";
+    const completed = await completeOpenAttempt(pool, {
+      paradaId,
+      status: attemptStatus,
+      failureReason:
         body.data.estado === "ausente"
           ? (body.data.failureReason ?? "recipient_absent")
           : null,
-        failureAvoided,
-        failureAvoided ? "whatsapp" : null,
-        dwell[0]?.dwell_seconds ?? null,
-      ],
-    );
+      failureAvoided,
+      avoidanceChannel: failureAvoided ? "whatsapp" : null,
+      dwellSeconds: dwell[0]?.dwell_seconds ?? null,
+    });
+
+    await logOps({
+      level: "info",
+      category: "delivery_status",
+      event: "delivery_status.changed",
+      orderId,
+      attemptNumber: completed.attemptNumber,
+      actor: parada.repartidor_id,
+      payload: { from: fromEstado, to: body.data.estado, attemptStatus },
+    });
 
     if (body.data.estado === "entregado") {
       await enqueueRouteProgress({

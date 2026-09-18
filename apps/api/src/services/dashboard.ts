@@ -1,5 +1,6 @@
 import {
   ESTADO_A_DELIVERY_STATUS,
+  getOpsMetrics,
   type DashboardFilters,
   type DashboardPayload,
   type Delivery,
@@ -58,17 +59,6 @@ async function kpisFor(
     [agenciaId, from, to, courierId ?? null],
   );
 
-  const { rows: avoidedRows } = await pool.query(
-    `SELECT count(*)::int AS avoided
-     FROM delivery_attempts da
-     JOIN paradas p ON p.id = da.parada_id
-     JOIN rutas r ON r.id = p.ruta_id
-     WHERE r.agencia_id = $1
-       AND r.fecha BETWEEN $2::date AND $3::date
-       AND da.failure_avoided`,
-    [agenciaId, from, to],
-  );
-
   const { rows: dwellRows } = await pool.query(
     `SELECT avg(dwell_seconds) AS avg_dwell
      FROM geofence_events g
@@ -110,29 +100,33 @@ async function kpisFor(
   const total = rows[0]?.total ?? 0;
   const delivered = rows[0]?.delivered ?? 0;
   const failed = rows[0]?.failed ?? 0;
-  const avoided = avoidedRows[0]?.avoided ?? 0;
   const firstOk = rows[0]?.first_ok ?? 0;
   const firstTotal = rows[0]?.first_total ?? 0;
   const onTime = rows[0]?.on_time ?? 0;
   const dwell = Number(dwellRows[0]?.avg_dwell ?? 0);
-  const denomAvoid = avoided + failed;
+
+  const ops = await getOpsMetrics(pool, {
+    from: `${from}T00:00:00.000Z`,
+    to: `${to}T23:59:59.999Z`,
+    agenciaId,
+  });
 
   return {
     period: { from, to },
     totalDeliveries: total,
     deliveredCount: delivered,
     failedCount: failed,
-    failedDeliveriesAvoided: avoided,
-    failedDeliveriesAvoidedRate: denomAvoid ? round(avoided / denomAvoid) : 0,
-    avgGeofenceDwellSeconds: round(dwell, 1),
-    avgGeofenceDwellMinutes: round(dwell / 60, 2),
+    failedDeliveriesAvoided: ops.failureAvoided.count,
+    failedDeliveriesAvoidedRate: ops.failureAvoided.rate,
+    avgGeofenceDwellSeconds: ops.dwell.avgSeconds ?? round(dwell, 1),
+    avgGeofenceDwellMinutes: ops.dwell.avgMinutes ?? round(dwell / 60, 2),
     firstAttemptSuccessRate: firstTotal ? round(firstOk / firstTotal) : 0,
     firstAttemptSuccessCount: firstOk,
     firstAttemptTotal: firstTotal,
     onTimeRate: delivered ? round(onTime / delivered) : 0,
     avgAttemptsToDeliver: round(Number(attemptsRows[0]?.avg_attempts ?? 0), 2),
     activeCouriers: liveRows[0]?.couriers ?? 0,
-    inGeofenceNow: liveRows[0]?.live ?? 0,
+    inGeofenceNow: ops.system.inGeofenceNow,
   };
 }
 
