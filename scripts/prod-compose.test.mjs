@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
@@ -131,6 +131,21 @@ describe("docker-compose.prod.yml: endurecimiento y healthchecks", () => {
 
     assert.equal(services.caddy.depends_on?.web?.condition, "service_healthy");
     assert.equal(services.caddy.depends_on?.api?.condition, "service_healthy");
+  });
+
+  it("el snippet de healthcheck de workers resuelve ioredis y pg", {
+    skip: !existsSync(join(root, "node_modules")),
+  }, () => {
+    const out = execFileSync(
+      "node",
+      [
+        "--input-type=module",
+        "-e",
+        "const pgMod=await import('pg');const Pg=pgMod.default??pgMod;if(typeof Pg.Client!=='function')process.exit(2);const {default:Redis}=await import('ioredis');if(typeof Redis!=='function')process.exit(3);process.stdout.write('ok');",
+      ],
+      { cwd: join(root, "apps/workers"), encoding: "utf8" },
+    );
+    assert.equal(out, "ok");
   });
 
   it("Caddy recibe ACME_EMAIL y no monta el seed demo", () => {
