@@ -12,16 +12,14 @@ import { repartidorRoutes } from "./routes/repartidor.js";
 import { agenciaRoutes } from "./routes/agencia.js";
 import { opsRoutes, registerOps } from "./routes/ops.js";
 import { registerWs } from "./ws/gateway.js";
+import { GLOBAL_RATE_LIMIT } from "./rate-limit-config.js";
 
 const app = Fastify({ logger: true });
 
 await app.register(cors, { origin: config.corsOrigin });
 await app.register(formbody);
 await app.register(websocket);
-await app.register(rateLimit, {
-  max: 100,
-  timeWindow: "1 minute",
-});
+await app.register(rateLimit, GLOBAL_RATE_LIMIT);
 
 await registerOps(app);
 await app.register(healthRoutes);

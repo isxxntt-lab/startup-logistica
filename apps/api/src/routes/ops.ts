@@ -60,7 +60,11 @@ export async function registerOps(app: FastifyInstance) {
 }
 
 export async function opsRoutes(app: FastifyInstance) {
-  app.get("/api/ops/health", async () => getOpsHealth(pool));
+  app.get(
+    "/api/ops/health",
+    { config: { rateLimit: false } },
+    async () => getOpsHealth(pool),
+  );
 
   app.get("/api/ops/metrics", async (request, reply) => {
     const auth = await requireOpsAuth(request, reply);
