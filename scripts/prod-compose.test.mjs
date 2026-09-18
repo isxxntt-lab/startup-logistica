@@ -125,7 +125,8 @@ describe("docker-compose.prod.yml: endurecimiento y healthchecks", () => {
     assert.ok(services.redis.healthcheck?.test, "redis healthcheck");
 
     const webTest = JSON.stringify(services.web.healthcheck.test);
-    assert.match(webTest, /wget|127\.0\.0\.1/);
+    assert.match(webTest, /wget/);
+    assert.match(webTest, /127\.0\.0\.1:8080/);
 
     const apiTest = JSON.stringify(services.api.healthcheck.test);
     assert.match(apiTest, /\/api\/ops\/health/);
@@ -207,6 +208,69 @@ function hasDockerCompose() {
   });
   return result.status === 0;
 }
+
+function lastUserInstruction(dockerfile) {
+  const users = [...dockerfile.matchAll(/^\s*USER\s+(\S+)/gm)].map((m) => m[1]);
+  return users.at(-1) ?? "";
+}
+
+describe("contenedores non-root (USER ≠ 0)", () => {
+  it("api y workers usan USER 10001:10001 y pnpm start:prod (sin dist multi-stage)", () => {
+    for (const rel of ["apps/api/Dockerfile", "apps/workers/Dockerfile"]) {
+      const df = readFileSync(join(root, rel), "utf8");
+      assert.match(df, /groupadd[^\n]*--gid 10001 app/);
+      assert.match(df, /useradd[^\n]*--uid 10001[^\n]*app/);
+      assert.match(df, /chown -R app:app \/app/);
+      assert.match(df, /USER 10001:10001/);
+      assert.equal(lastUserInstruction(df), "10001:10001");
+      assert.doesNotMatch(df, /^\s*USER\s+0\b/m);
+      assert.doesNotMatch(df, /^\s*USER\s+root\b/m);
+      assert.match(df, /CMD \["pnpm", "start:prod"\]/);
+      assert.doesNotMatch(df, /node dist/);
+    }
+    const apiDf = readFileSync(join(root, "apps/api/Dockerfile"), "utf8");
+    assert.match(apiDf, /EXPOSE 3000/);
+    const workersDf = readFileSync(join(root, "apps/workers/Dockerfile"), "utf8");
+    assert.doesNotMatch(workersDf, /EXPOSE /);
+  });
+
+  it("web usa nginx-unprivileged USER 101 y listen 8080", () => {
+    const df = readFileSync(join(root, "apps/web-cliente/Dockerfile"), "utf8");
+    assert.match(df, /nginxinc\/nginx-unprivileged:1\.27-alpine/);
+    assert.match(df, /USER 101/);
+    assert.equal(lastUserInstruction(df), "101");
+    assert.match(df, /EXPOSE 8080/);
+    assert.doesNotMatch(df, /EXPOSE 80\b/);
+    assert.doesNotMatch(df, /^\s*USER\s+0\b/m);
+    assert.doesNotMatch(df, /^\s*USER\s+root\b/m);
+
+    const nginx = readFileSync(join(root, "apps/web-cliente/nginx.conf"), "utf8");
+    assert.match(nginx, /listen 8080\s*;/);
+    assert.doesNotMatch(nginx, /listen 80\b/);
+  });
+
+  it("compose expone web:8080 y Caddy hace reverse_proxy web:8080", () => {
+    const expose = (services.web.expose ?? []).map(String);
+    assert.ok(expose.includes("8080"), "web expose 8080");
+    assert.ok(!expose.includes("80"), "web no expone 80");
+
+    const webTest = JSON.stringify(services.web.healthcheck.test);
+    assert.match(webTest, /127\.0\.0\.1:8080/);
+
+    const tracking = caddyfile.match(/\{\$SITE_TRACKING:[^}]+\} \{[\s\S]*?\n\}/);
+    assert.ok(tracking, "bloque SITE_TRACKING");
+    assert.match(tracking[0], /reverse_proxy web:8080/);
+    assert.doesNotMatch(tracking[0], /reverse_proxy web:80\b/);
+  });
+
+  it("nginx-unprivileged mantiene read_only + tmpfs de nginx", () => {
+    assert.equal(services.web.read_only, true);
+    const webTmpfs = (services.web.tmpfs ?? []).map((m) => String(m).split(":")[0]);
+    for (const path of ["/var/cache/nginx", "/var/run", "/var/log/nginx", "/var/lib/nginx", "/tmp"]) {
+      assert.ok(webTmpfs.includes(path), `web tmpfs ${path}`);
+    }
+  });
+});
 
 describe("docker compose config (si hay binario)", () => {
   it("el YAML interpola sin error con un env de prueba", {
