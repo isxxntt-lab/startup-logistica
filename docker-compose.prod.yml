@@ -1,0 +1,167 @@
+# Stack de producción. Postgres y Redis NO se publican al host.
+# Uso:
+#   cp .env.production.example .env.production
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# No monta infra/postgres/02-seed.sql (datos demo).
+
+name: startup-logistica-prod
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_TRACKING: ${SITE_TRACKING:-seguimiento.rutacerca.es}
+      SITE_API: ${SITE_API:-api.rutacerca.es}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+    networks:
+      - edge
+      - internal
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web-cliente/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - internal
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_MASTER_SECRET: ${JWT_MASTER_SECRET}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      OPS_TOKEN: ${OPS_TOKEN:-}
+      OPS_CHECKS_INTERVAL_MS: ${OPS_CHECKS_INTERVAL_MS:-120000}
+      OPS_CLIENT_RESPONSE_DELAY_MINUTES: ${OPS_CLIENT_RESPONSE_DELAY_MINUTES:-20}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - internal
+
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_MASTER_SECRET: ${JWT_MASTER_SECRET}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_SMS_FROM: ${TWILIO_SMS_FROM:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rutacerca}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-startup_logistica}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ./infra/postgres/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./infra/postgres/03-analytics.sql:/docker-entrypoint-initdb.d/03-analytics.sql:ro
+      - ./infra/postgres/04-ops.sql:/docker-entrypoint-initdb.d/04-ops.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-rutacerca} -d ${POSTGRES_DB:-startup_logistica}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    volumes:
+      - redisdata_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - internal
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+  internal:
