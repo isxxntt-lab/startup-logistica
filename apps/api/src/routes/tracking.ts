@@ -3,6 +3,9 @@ import { z } from "zod";
 import {
   canConfirmPresence,
   canReschedule,
+  trackingGoneBody,
+  trackingApiPath,
+  TRACKING_ACTIONS,
   type EstadoParada,
   repartidorChannel,
 } from "@startup-logistica/shared";
@@ -59,7 +62,7 @@ function sendGone(
   reply: { code: (status: number) => { send: (body: unknown) => unknown } },
   reason: "expired" | "used",
 ) {
-  return reply.code(410).send({ error: "gone", reason });
+  return reply.code(410).send(trackingGoneBody(reason));
 }
 
 async function logTrackingAuthFailure(
@@ -172,7 +175,7 @@ async function publicarRespuestaCliente(
 }
 
 export async function trackingRoutes(app: FastifyInstance) {
-  app.get("/api/tracking/session", async (request, reply) => {
+  app.get(trackingApiPath(TRACKING_ACTIONS.session), async (request, reply) => {
     const token = tokenDesdeRequest(request);
     const auth = await autenticarTracking(token);
     if (!auth.ok) return replyTrackingAuth(reply, token, auth.failure);
@@ -186,7 +189,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/api/tracking/position", {
+  app.get(trackingApiPath(TRACKING_ACTIONS.position), {
     config: {
       rateLimit: {
         ...TRACKING_POSITION_RATE_LIMIT,
@@ -212,7 +215,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/api/tracking/confirm-presence", async (request, reply) => {
+  app.post(trackingApiPath(TRACKING_ACTIONS.confirmPresence), async (request, reply) => {
     const parsed = tokenBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.flatten() });
@@ -254,7 +257,7 @@ export async function trackingRoutes(app: FastifyInstance) {
     return { ok: true, status: "will_be_there" as const };
   });
 
-  app.post("/api/tracking/reschedule", async (request, reply) => {
+  app.post(trackingApiPath(TRACKING_ACTIONS.reschedule), async (request, reply) => {
     const parsed = tokenBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.flatten() });

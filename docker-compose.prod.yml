@@ -3,6 +3,12 @@
 #   cp .env.production.example .env.production
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
+# Smoke local con HTTPS interno (localhost / api.localhost, sin ACME público):
+#   cp .env.production.local.example .env.production
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+#     --env-file .env.production up -d --build
+#   ver deploy/LOCAL_HTTPS.md
+#
 # Redes:
 #   edge     — Caddy (80/443) y backends que proxifica (web, api)
 #   internal — PostGIS, Redis, workers; la API también está aquí para llegar a datos
@@ -51,11 +57,11 @@ services:
     expose:
       - "8080"
     tmpfs:
-      - /var/cache/nginx
-      - /var/run
-      - /var/log/nginx
-      - /var/lib/nginx
-      - /tmp
+      - /var/cache/nginx:uid=101,gid=101,mode=1777
+      - /var/run:uid=101,gid=101,mode=1777
+      - /var/log/nginx:uid=101,gid=101,mode=1777
+      - /var/lib/nginx:uid=101,gid=101,mode=1777
+      - /tmp:uid=101,gid=101,mode=1777
     read_only: true
     security_opt:
       - no-new-privileges:true

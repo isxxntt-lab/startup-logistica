@@ -5,6 +5,7 @@ import type {
   TrackingPosition,
   TrackingSession,
 } from "../types/tracking";
+import { TRACKING_ACTIONS, trackingApiPath } from "@startup-logistica/shared/tracking";
 
 const apiBase = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -57,14 +58,14 @@ async function parseGoneOrJson<T>(res: Response): Promise<T> {
 }
 
 export async function fetchTrackingSession(token: string): Promise<TrackingSession> {
-  const res = await fetch(withToken("/api/tracking/session", token));
+  const res = await fetch(withToken(trackingApiPath(TRACKING_ACTIONS.session), token));
   return parseGoneOrJson<TrackingSession>(res);
 }
 
 export async function fetchCourierPosition(
   token: string,
 ): Promise<TrackingPosition | null> {
-  const res = await fetch(withToken("/api/tracking/position", token));
+  const res = await fetch(withToken(trackingApiPath(TRACKING_ACTIONS.position), token));
   if (res.status === 404) return null;
   return parseGoneOrJson<TrackingPosition>(res);
 }
@@ -72,7 +73,7 @@ export async function fetchCourierPosition(
 export async function postConfirmPresence(
   token: string,
 ): Promise<ConfirmPresenceResponse> {
-  const res = await fetch(`${apiBase}/api/tracking/confirm-presence`, {
+  const res = await fetch(`${apiBase}${trackingApiPath(TRACKING_ACTIONS.confirmPresence)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
@@ -84,7 +85,7 @@ export async function postReschedule(
   token: string,
   preferredWindow?: string,
 ): Promise<RescheduleResponse> {
-  const res = await fetch(`${apiBase}/api/tracking/reschedule`, {
+  const res = await fetch(`${apiBase}${trackingApiPath(TRACKING_ACTIONS.reschedule)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

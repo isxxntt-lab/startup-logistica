@@ -1,0 +1,19 @@
+# Override local del stack prod: TLS interno, sin Let's Encrypt.
+# No usar en el VPS. El Caddyfile de producción sigue con ACME.
+#
+#   cp .env.production.local.example .env.production
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+#     --env-file .env.production up -d --build
+#
+# Detalle: deploy/LOCAL_HTTPS.md
+
+services:
+  caddy:
+    environment:
+      SITE_TRACKING: ${SITE_TRACKING:-localhost}
+      SITE_API: ${SITE_API:-api.localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-ops@localhost}
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config

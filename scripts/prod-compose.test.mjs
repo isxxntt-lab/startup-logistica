@@ -115,6 +115,11 @@ describe("docker-compose.prod.yml: endurecimiento y healthchecks", () => {
     for (const path of ["/var/cache/nginx", "/var/run", "/var/log/nginx", "/var/lib/nginx", "/tmp"]) {
       assert.ok(webTmpfs.includes(path), `web tmpfs ${path}`);
     }
+    for (const mount of services.web.tmpfs ?? []) {
+      const text = String(mount);
+      assert.match(text, /uid=101/, `web tmpfs uid=101: ${text}`);
+      assert.match(text, /gid=101/, `web tmpfs gid=101: ${text}`);
+    }
   });
 
   it("healthchecks de web, workers y api", () => {
@@ -271,11 +276,14 @@ describe("contenedores non-root (USER ≠ 0)", () => {
     assert.doesNotMatch(tracking[0], /reverse_proxy web:80\b/);
   });
 
-  it("nginx-unprivileged mantiene read_only + tmpfs de nginx", () => {
+  it("nginx-unprivileged mantiene read_only + tmpfs de nginx con uid=101", () => {
     assert.equal(services.web.read_only, true);
     const webTmpfs = (services.web.tmpfs ?? []).map((m) => String(m).split(":")[0]);
     for (const path of ["/var/cache/nginx", "/var/run", "/var/log/nginx", "/var/lib/nginx", "/tmp"]) {
       assert.ok(webTmpfs.includes(path), `web tmpfs ${path}`);
+    }
+    for (const mount of services.web.tmpfs ?? []) {
+      assert.match(String(mount), /uid=101/);
     }
   });
 });
@@ -302,6 +310,32 @@ describe("docker compose config (si hay binario)", () => {
     );
     assert.match(result, /read_only:\s*true/);
     assert.match(result, /ACME_EMAIL/);
+    assert.match(result, /uid=101/);
+  });
+
+  it("el override local interpola y monta Caddyfile.local", {
+    skip: !hasDockerCompose(),
+  }, () => {
+    const envFile = join(root, "scripts", "prod-compose.test.env");
+    const result = execFileSync(
+      "docker",
+      [
+        "compose",
+        "-f",
+        composePath,
+        "-f",
+        join(root, "docker-compose.prod.local.yml"),
+        "--env-file",
+        envFile,
+        "config",
+      ],
+      {
+        encoding: "utf8",
+        env: { ...process.env, COMPOSE_IGNORE_ORPHANS: "1" },
+      },
+    );
+    assert.match(result, /Caddyfile\.local/);
+    assert.doesNotMatch(result, /^\s*- \.\/Caddyfile:/m);
   });
 });
 
@@ -389,5 +423,163 @@ describe("smoke staging E2E (docs + healthcheck, sin VPS)", () => {
       `${refused.stdout}\n${refused.stderr}`,
       /GET https:\/\/api\.rutacerca\.es\/health/,
     );
+  });
+});
+
+function stripDockerfileCommentsAndContinuations(src) {
+  return src
+    .replace(/\\\n/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/#.*$/, "").trim())
+    .filter(Boolean);
+}
+
+function assertInstallAfterSourceCopy(dockerfile, sourceDirs) {
+  const lines = stripDockerfileCommentsAndContinuations(dockerfile);
+  const copyRe = new RegExp(
+    `^COPY\\s+(${sourceDirs.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\s+\\1\\s*$`,
+  );
+  let lastSourceCopy = -1;
+  let firstInstall = -1;
+  lines.forEach((line, i) => {
+    if (copyRe.test(line)) lastSourceCopy = i;
+    if (/^RUN\b/.test(line) && /\bpnpm\s+install\b/.test(line) && firstInstall < 0) {
+      firstInstall = i;
+    }
+  });
+  assert.ok(lastSourceCopy >= 0, `COPY de fuentes ${sourceDirs.join(", ")}`);
+  assert.ok(firstInstall >= 0, "RUN pnpm install");
+  assert.ok(
+    firstInstall > lastSourceCopy,
+    "pnpm install debe ir después de COPY de las fuentes (evita colisión con node_modules)",
+  );
+  const installLine = lines[firstInstall];
+  assert.match(installLine, /rm\s+-rf/, "rm -rf node_modules antes o en el mismo RUN que pnpm install");
+}
+
+describe("Dockerfiles: COPY de fuentes antes de pnpm install", () => {
+  it("api copia packages/shared y apps/api antes de instalar", () => {
+    const df = readFileSync(join(root, "apps/api/Dockerfile"), "utf8");
+    assertInstallAfterSourceCopy(df, ["packages/shared", "apps/api"]);
+  });
+
+  it("workers copia packages/shared y apps/workers antes de instalar", () => {
+    const df = readFileSync(join(root, "apps/workers/Dockerfile"), "utf8");
+    assertInstallAfterSourceCopy(df, ["packages/shared", "apps/workers"]);
+  });
+
+  it("web copia packages/shared y apps/web-cliente antes de instalar", () => {
+    const df = readFileSync(join(root, "apps/web-cliente/Dockerfile"), "utf8");
+    assertInstallAfterSourceCopy(df, ["packages/shared", "apps/web-cliente"]);
+  });
+
+  it(".dockerignore ignora node_modules en cualquier paquete", () => {
+    const ignore = readFileSync(join(root, ".dockerignore"), "utf8");
+    assert.match(ignore, /^\*\*\/node_modules$/m);
+    assert.match(ignore, /^\*\*\/node_modules\/\*\*$/m);
+  });
+});
+
+describe("HTTPS local (override, no prod)", () => {
+  const localCaddy = join(root, "Caddyfile.local");
+  const localCompose = join(root, "docker-compose.prod.local.yml");
+  const localEnv = join(root, ".env.production.local.example");
+
+  it("Caddyfile de prod no usa tls internal", () => {
+    const directives = caddyfile
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+    assert.doesNotMatch(directives, /tls\s+internal/);
+    assert.doesNotMatch(directives, /local_certs/);
+  });
+
+  it("Caddyfile.local usa tls internal para localhost / api.localhost", () => {
+    const src = readFileSync(localCaddy, "utf8");
+    assert.match(src, /tls\s+internal/);
+    assert.match(src, /local_certs/);
+    assert.match(src, /\{\$SITE_TRACKING:localhost\}/);
+    assert.match(src, /\{\$SITE_API:api\.localhost\}/);
+    assert.match(src, /reverse_proxy web:8080/);
+    assert.match(src, /reverse_proxy api:3000/);
+    assert.match(src, /Strict-Transport-Security/);
+  });
+
+  it("compose override monta Caddyfile.local y no pide ACME de prod", () => {
+    const override = loadYaml(localCompose);
+    const vols = (override.services.caddy.volumes ?? []).map(String);
+    assert.ok(vols.some((v) => v.includes("Caddyfile.local") && v.includes("/etc/caddy/Caddyfile")));
+    assert.ok(!vols.some((v) => /(^|[^-])\.\/Caddyfile:/.test(v) && !v.includes("Caddyfile.local")));
+    assert.match(String(override.services.caddy.environment.SITE_TRACKING), /localhost/);
+    assert.match(String(override.services.caddy.environment.SITE_API), /api\.localhost/);
+  });
+
+  it("plantilla local documenta localhost y no se commitea .env.production", () => {
+    const src = readFileSync(localEnv, "utf8");
+    assert.match(src, /^SITE_TRACKING=localhost$/m);
+    assert.match(src, /^SITE_API=api\.localhost$/m);
+    assert.match(src, /^VITE_API_URL=https:\/\/api\.localhost$/m);
+    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
+    assert.match(gitignore, /^\.env\.production$/m);
+    assert.match(gitignore, /^\.env\.production\.local$/m);
+    const localDoc = readFileSync(join(root, "deploy", "LOCAL_HTTPS.md"), "utf8");
+    assert.match(localDoc, /docker-compose\.prod\.local\.yml/);
+    assert.match(localDoc, /tls internal/);
+  });
+});
+
+describe("shared barrel, geofence y seed idempotente", () => {
+  it("el barrel reexporta tracking-token y pipeline de notificaciones", () => {
+    const barrel = readFileSync(join(root, "packages/shared/src/index.ts"), "utf8");
+    assert.match(barrel, /tracking-token/);
+    assert.match(barrel, /notifications\/pipeline/);
+    const token = readFileSync(join(root, "packages/shared/src/tracking-token.ts"), "utf8");
+    assert.match(token, /ENLACE_YA_NO_VALIDO/);
+    assert.match(token, /TRACKING_ACTIONS/);
+    const pipeline = readFileSync(
+      join(root, "packages/shared/src/notifications/pipeline.ts"),
+      "utf8",
+    );
+    assert.match(pipeline, /export async function enqueueNotification/);
+    assert.match(pipeline, /export function notificationDedupeKey/);
+  });
+
+  it("geofence exporta handleGeofence y el alias onLocationUpdate", () => {
+    const src = readFileSync(join(root, "apps/workers/src/consumers/geofence.ts"), "utf8");
+    const index = readFileSync(join(root, "apps/workers/src/index.ts"), "utf8");
+    assert.match(src, /export async function handleGeofence/);
+    assert.match(src, /export const onLocationUpdate = handleGeofence/);
+    assert.match(index, /import \{ handleGeofence \} from "\.\/consumers\/geofence\.js"/);
+  });
+
+  it("delivery_attempts demo solo inserta si existe la parada", () => {
+    for (const rel of ["infra/postgres/02-seed.sql", "infra/postgres/03-analytics.sql"]) {
+      const sql = readFileSync(join(root, rel), "utf8");
+      assert.match(sql, /INSERT INTO delivery_attempts/);
+      assert.match(sql, /FROM paradas p/);
+      assert.match(sql, /WHERE p\.id = '55555555-5555-5555-5555-555555555551'/);
+      assert.match(sql, /NOT EXISTS/);
+    }
+  });
+
+  it("no hay marcadores de conflicto de merge/stash", () => {
+    const result = spawnSync(
+      "grep",
+      [
+        "-R",
+        "-n",
+        "-E",
+        "^<<<<<<<|^>>>>>>>",
+        "--exclude-dir=node_modules",
+        "--exclude-dir=.git",
+        "--exclude-dir=dist",
+        "--exclude-dir=.pnpm-store",
+        ".",
+      ],
+      { encoding: "utf8", cwd: root },
+    );
+    const out = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    assert.equal(result.status, 1, out);
+    assert.equal((result.stdout ?? "").trim(), "");
   });
 });

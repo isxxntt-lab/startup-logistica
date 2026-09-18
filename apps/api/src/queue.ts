@@ -1,6 +1,7 @@
 import {
   STREAMS,
   serializeEvent,
+  enqueueNotification as enqueueNotificationToStream,
   type DomainEvent,
 } from "@startup-logistica/shared";
 import { redis } from "./redis.js";
@@ -12,7 +13,7 @@ export async function enqueue(stream: string, event: DomainEvent): Promise<strin
 export async function enqueueNotification(
   event: Extract<DomainEvent, { type: "NOTIFICATION_REQUESTED" }>,
 ): Promise<string> {
-  return enqueue(STREAMS.notifications, event);
+  return enqueueNotificationToStream(redis, event);
 }
 
 export async function enqueueWebhook(

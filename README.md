@@ -261,8 +261,11 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 | `apps/workers/Dockerfile` | Consumers Redis |
 | `apps/web-cliente/Dockerfile` | Build Vite + nginx unprivileged (`USER 101`, :8080, `COPY --chown=101:101` del `dist`) |
 | `docker-compose.prod.yml` | PostGIS + Redis internos, Caddy en 80/443 |
-| `Caddyfile` | TLS y reverse proxy |
+| `docker-compose.prod.local.yml` | Override local: `Caddyfile.local` + `tls internal` (no usar en el VPS) |
+| `Caddyfile` | TLS ACME y reverse proxy |
+| `Caddyfile.local` | TLS interno para `localhost` / `api.localhost` |
 | `.env.production.example` | Plantilla de secretos (no commitear valores reales) |
+| `.env.production.local.example` | Plantilla local (`localhost` / `api.localhost`; no commitear `.env.production`) |
 | `deploy/SECURITY_CHECKLIST.md` | Checklist de endurecimiento |
 | `deploy/MERGE_ORDER.md` | Orden #4→#11, #9 rebaseado sobre #11, qué verifica Grey, VPS ≠ código |
 | `deploy/DEPLOY_PLAN_MANANA.md` | Pasos de go-live |
@@ -277,6 +280,14 @@ cp .env.production.example .env.production
 # editar secretos, dominios y DATABASE_URL / REDIS_URL
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ./scripts/prod-healthcheck.sh https://api.rutacerca.es https://seguimiento.rutacerca.es
+```
+
+Smoke **local** del mismo stack (HTTPS interno, sin Let's Encrypt): `deploy/LOCAL_HTTPS.md`.
+
+```bash
+cp .env.production.local.example .env.production
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+  --env-file .env.production up -d --build
 ```
 
 Smoke staging **antes de DNS público** (compose local, Twilio vacío, sin ACME): `deploy/STAGING_SMOKE.md`.
