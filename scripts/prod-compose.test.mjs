@@ -321,4 +321,73 @@ describe("orden de merge y operacional VPS", () => {
     assert.match(src, /SITE_API/);
     assert.match(src, /no usar `demo-api-key`/i);
   });
+
+  it("MERGE_ORDER y DEPLOY_PLAN exigen smoke staging antes de DNS público", () => {
+    const merge = readFileSync(join(root, "deploy", "MERGE_ORDER.md"), "utf8");
+    const plan = readFileSync(join(root, "deploy", "DEPLOY_PLAN_MANANA.md"), "utf8");
+    const checklist = readFileSync(
+      join(root, "deploy", "SECURITY_CHECKLIST.md"),
+      "utf8",
+    );
+    assert.match(merge, /#12 → este PR \(smoke staging E2E\)/);
+    assert.match(merge, /STAGING_SMOKE\.md/);
+    assert.match(merge, /Antes de DNS público/);
+    assert.match(plan, /Smoke staging E2E antes de DNS público/);
+    assert.match(plan, /STAGING_SMOKE\.md/);
+    assert.match(plan, /STAGING_BASE/);
+    assert.match(checklist, /STAGING_SMOKE\.md/);
+    assert.match(checklist, /antes de DNS/i);
+  });
+});
+
+describe("smoke staging E2E (docs + healthcheck, sin VPS)", () => {
+  const smokeDoc = join(root, "deploy", "STAGING_SMOKE.md");
+  const healthcheck = join(root, "scripts", "prod-healthcheck.sh");
+
+  it("STAGING_SMOKE.md cubre la secuencia compose → metrics → PLAN=1", () => {
+    const src = readFileSync(smokeDoc, "utf8");
+    assert.match(src, /docker compose up/);
+    assert.match(src, /\/health/);
+    assert.match(src, /\/api\/ops\/health/);
+    assert.match(src, /location_update/);
+    assert.match(src, /GROK_LOCATION_PINGS|40\.416775/);
+    assert.match(src, /dry-run/);
+    assert.match(src, /QUIET_HOURS/);
+    assert.match(src, /confirm-presence/);
+    assert.match(src, /failureAvoided/);
+    assert.match(src, /dwell/);
+    assert.match(src, /PLAN=1/);
+    assert.match(src, /backup-postgres\.sh/);
+    assert.doesNotMatch(src, /TWILIO_ACCOUNT_SID=AC/);
+    assert.doesNotMatch(src, /ACME_EMAIL=\S+@gmail/);
+    assert.match(src, /antes de apuntar DNS público/i);
+  });
+
+  it("prod-healthcheck.sh acepta STAGING_BASE y aborta smoke contra DNS de prod", () => {
+    const src = readFileSync(healthcheck, "utf8");
+    assert.match(src, /STAGING_BASE/);
+    assert.match(src, /STAGING_SMOKE/);
+    assert.match(src, /confirm-presence/);
+    assert.match(src, /PLAN=1/);
+    assert.match(src, /api\.rutacerca\.es/);
+
+    const syntax = spawnSync("bash", ["-n", healthcheck], { encoding: "utf8" });
+    assert.equal(syntax.status, 0, syntax.stderr);
+
+    const refused = spawnSync("bash", [healthcheck], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        STAGING_SMOKE: "1",
+        STAGING_BASE: "https://api.rutacerca.es",
+        AGENCY_API_KEY: "demo-api-key",
+      },
+    });
+    assert.equal(refused.status, 1, refused.stderr + refused.stdout);
+    assert.match(`${refused.stdout}\n${refused.stderr}`, /DNS público de prod/);
+    assert.doesNotMatch(
+      `${refused.stdout}\n${refused.stderr}`,
+      /GET https:\/\/api\.rutacerca\.es\/health/,
+    );
+  });
 });

@@ -209,6 +209,7 @@ describe("artefactos de backup/restore", () => {
     assert.match(src, /ST_DWithin/);
     assert.match(src, /CONFIRM=yes/);
     assert.match(src, /go-live/);
+    assert.match(src, /STAGING_SMOKE\.md/);
   });
 
   it("SECURITY_CHECKLIST y DEPLOY_PLAN exigen dry-run de restore antes de go-live", () => {
@@ -221,6 +222,8 @@ describe("artefactos de backup/restore", () => {
     assert.match(plan, /backup/i);
     assert.match(plan, /restore/i);
     assert.match(plan, /staging/i);
+    assert.match(plan, /STAGING_SMOKE\.md/);
+    assert.match(plan, /antes de DNS público/i);
   });
 });
 

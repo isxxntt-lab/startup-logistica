@@ -144,8 +144,8 @@ Si existe `foo.dump.sha256`, se verifica **antes** de tocar la base.
    ```
 
 5. El script corre `verify-postgis.sql`. Completa a mano lo de la sección siguiente.
-6. Smoke de app contra staging: `GET /health`, `GET /api/ops/health`, una parada con `ubicacion` (si el dump traía filas).
-7. Solo si esto es verde se marca el ítem de go-live en `deploy/SECURITY_CHECKLIST.md` y `deploy/DEPLOY_PLAN_MANANA.md`.
+6. Smoke de app contra staging: `deploy/STAGING_SMOKE.md` (health/ops, GPS geocerca, notificación dry-run, `confirm-presence`, métricas `failureAvoided`/`dwell`, restore `PLAN=1`). Este apartado (`CONFIRM=yes`) es el restore **destructivo** en throwaway; `PLAN=1` no lo sustituye.
+7. Solo si esto es verde se marca el ítem de go-live en `deploy/SECURITY_CHECKLIST.md` y `deploy/DEPLOY_PLAN_MANANA.md`. **DNS público después del smoke**, no antes.
 
 Throwaway en el mismo VPS (si aún no hay staging): segundo compose con **otro** `name:` y volumen distinto, o un `postgis/postgis:16-3.4` temporal. No uses `pgdata_prod`.
 

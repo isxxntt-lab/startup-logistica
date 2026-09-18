@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const base = process.env.PROD_SMOKE_BASE?.replace(/\/$/, "");
+const base = (process.env.STAGING_BASE || process.env.PROD_SMOKE_BASE)?.replace(
+  /\/$/,
+  "",
+);
 
 test("prod smoke: GET /health", { skip: !base }, async () => {
   const res = await fetch(`${base}/health`);
