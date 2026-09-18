@@ -23,6 +23,7 @@ pnpm dev:repartidor
 ```
 
 - API: http://localhost:3000/health
+- Ops health: http://localhost:3000/api/ops/health
 - Web cliente: http://localhost:5173/?token=…
 - App repartidor demo: http://localhost:5174
 
@@ -44,7 +45,7 @@ Abre la `url` que devuelve. Marcar entregas en la app del repartidor dispara el 
 | Paquete | Rol |
 |---|---|
 | `packages/shared` | Tipos, nombres de streams, máquina de estados de `paradas` |
-| `apps/api` | HTTP + WebSocket + encolado. Los webhooks solo validan firma y hacen `XADD` |
+| `apps/api` | HTTP + WebSocket + encolado. `/api/ops` para logs, alertas y métricas |
 | `apps/workers` | Consumer groups: notificaciones, webhooks inbound, geocerca `ST_DWithin`, progreso de ruta |
 | `apps/web-cliente` | SPA sin login (`?token=` en la URL) + Leaflet |
 | `apps/web-repartidor` | Simulador para probar GPS y WS |

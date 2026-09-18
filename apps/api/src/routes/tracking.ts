@@ -3,6 +3,9 @@ import { z } from "zod";
 import {
   canConfirmPresence,
   canReschedule,
+  logOps,
+  markRecipientResponse,
+  tokenFingerprint,
   type EstadoParada,
   repartidorChannel,
 } from "@startup-logistica/shared";
@@ -31,6 +34,10 @@ type ParadaTracking = {
   courier_updated_at: Date | null;
 };
 
+type TrackingAuthFailure =
+  | { kind: "invalid"; status: 401 | 404 }
+  | { kind: "gone"; reason: "expired" | "used" };
+
 function tokenDesdeRequest(request: {
   headers: { authorization?: string };
   query: unknown;
@@ -50,6 +57,36 @@ function sendGone(
   reason: "expired" | "used",
 ) {
   return reply.code(410).send({ error: "gone", reason });
+}
+
+async function logTrackingAuthFailure(
+  token: string | undefined,
+  failure: TrackingAuthFailure,
+) {
+  if (!token) return;
+  const { tokenPrefix, tokenHash } = tokenFingerprint(token);
+  await logOps({
+    level: failure.kind === "gone" ? "info" : "warn",
+    category: "tracking_token",
+    event: "tracking.token_rejected",
+    actor: "api",
+    payload: {
+      reason: failure.kind === "gone" ? failure.reason : "invalid",
+      statusCode: failure.kind === "gone" ? 410 : failure.status,
+      tokenPrefix,
+      tokenHash,
+    },
+  });
+}
+
+async function replyTrackingAuth(
+  reply: { code: (status: number) => { send: (body: unknown) => unknown } },
+  token: string | undefined,
+  failure: TrackingAuthFailure,
+) {
+  await logTrackingAuthFailure(token, failure);
+  if (failure.kind === "gone") return sendGone(reply, failure.reason);
+  return reply.code(failure.status).send({ error: "invalid" });
 }
 
 async function cargarParada(token: string): Promise<ParadaTracking | null> {
@@ -133,11 +170,9 @@ async function publicarRespuestaCliente(
 
 export async function trackingRoutes(app: FastifyInstance) {
   app.get("/api/tracking/session", async (request, reply) => {
-    const auth = await autenticarTracking(tokenDesdeRequest(request));
-    if (!auth.ok) {
-      if (auth.failure.kind === "gone") return sendGone(reply, auth.failure.reason);
-      return reply.code(auth.failure.status).send({ error: "invalid" });
-    }
+    const token = tokenDesdeRequest(request);
+    const auth = await autenticarTracking(token);
+    if (!auth.ok) return replyTrackingAuth(reply, token, auth.failure);
     const { parada, sessionStatus } = auth;
     return {
       status: sessionStatus,
@@ -149,11 +184,9 @@ export async function trackingRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/tracking/position", async (request, reply) => {
-    const auth = await autenticarTracking(tokenDesdeRequest(request));
-    if (!auth.ok) {
-      if (auth.failure.kind === "gone") return sendGone(reply, auth.failure.reason);
-      return reply.code(auth.failure.status).send({ error: "invalid" });
-    }
+    const token = tokenDesdeRequest(request);
+    const auth = await autenticarTracking(token);
+    if (!auth.ok) return replyTrackingAuth(reply, token, auth.failure);
     const { parada } = auth;
     if (parada.courier_lat == null || parada.courier_lng == null) {
       return reply.code(404).send({ error: "no_position" });
@@ -171,19 +204,38 @@ export async function trackingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: parsed.error.flatten() });
     }
     const auth = await autenticarTracking(parsed.data.token);
-    if (!auth.ok) {
-      if (auth.failure.kind === "gone") return sendGone(reply, auth.failure.reason);
-      return reply.code(auth.failure.status).send({ error: "invalid" });
-    }
+    if (!auth.ok) return replyTrackingAuth(reply, parsed.data.token, auth.failure);
     const { parada } = auth;
     if (!canConfirmPresence(parada.estado)) {
       return reply.code(409).send({ error: "transicion_invalida" });
     }
     if (parada.estado !== "confirmado") {
+      const from = parada.estado;
+      const orderId = parada.referencia_pedido ?? parada.id;
       await pool.query(`UPDATE paradas SET estado = 'confirmado' WHERE id = $1`, [
         parada.id,
       ]);
+      await markRecipientResponse(pool, {
+        paradaId: parada.id,
+        recipientStatus: "confirmed",
+      });
       await publicarRespuestaCliente(parada.repartidor_id, parada.id, "confirmado");
+      await logOps({
+        level: "info",
+        category: "delivery_status",
+        event: "delivery_status.changed",
+        orderId,
+        actor: "cliente",
+        payload: { from, to: "confirmado" },
+      });
+      await logOps({
+        level: "info",
+        category: "tracking_token",
+        event: "tracking.confirm_presence",
+        orderId,
+        actor: "cliente",
+        payload: { from, to: "confirmado" },
+      });
     }
     return { ok: true, status: "will_be_there" as const };
   });
@@ -194,15 +246,14 @@ export async function trackingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: parsed.error.flatten() });
     }
     const auth = await autenticarTracking(parsed.data.token);
-    if (!auth.ok) {
-      if (auth.failure.kind === "gone") return sendGone(reply, auth.failure.reason);
-      return reply.code(auth.failure.status).send({ error: "invalid" });
-    }
+    if (!auth.ok) return replyTrackingAuth(reply, parsed.data.token, auth.failure);
     const { parada } = auth;
     if (!canReschedule(parada.estado)) {
       return reply.code(409).send({ error: "transicion_invalida" });
     }
     if (parada.estado !== "reprogramado") {
+      const from = parada.estado;
+      const orderId = parada.referencia_pedido ?? parada.id;
       const notas = parsed.data.preferred_window
         ? `ventana: ${parsed.data.preferred_window}`
         : null;
@@ -213,12 +264,37 @@ export async function trackingRoutes(app: FastifyInstance) {
          WHERE id = $1`,
         [parada.id, notas],
       );
+      await markRecipientResponse(pool, {
+        paradaId: parada.id,
+        recipientStatus: "rescheduled",
+        closeAttempt: true,
+      });
       await publicarRespuestaCliente(
         parada.repartidor_id,
         parada.id,
         "reprogramado",
         parsed.data.preferred_window,
       );
+      await logOps({
+        level: "info",
+        category: "delivery_status",
+        event: "delivery_status.changed",
+        orderId,
+        actor: "cliente",
+        payload: { from, to: "reprogramado" },
+      });
+      await logOps({
+        level: "info",
+        category: "tracking_token",
+        event: "tracking.reschedule",
+        orderId,
+        actor: "cliente",
+        payload: {
+          from,
+          to: "reprogramado",
+          preferred_window: parsed.data.preferred_window ?? null,
+        },
+      });
     }
     return { ok: true, status: "reschedule_requested" as const };
   });
