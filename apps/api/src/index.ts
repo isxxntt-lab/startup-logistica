@@ -15,7 +15,7 @@ import { registerWs } from "./ws/gateway.js";
 
 const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: true });
+await app.register(cors, { origin: config.corsOrigin });
 await app.register(formbody);
 await app.register(websocket);
 await app.register(rateLimit, {

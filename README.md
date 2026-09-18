@@ -230,3 +230,26 @@ curl -X POST http://localhost:3000/agencia/paradas/55555555-5555-5555-5555-55555
 Abre la `url` que devuelve (`/?token=…`). En la app del repartidor, cargar `repartidor_001` y pulsar el ping GPS dispara geocerca. Completar paradas dispara **progreso de ruta**: si faltan exactamente 3, el worker encola WhatsApp (dry-run si no hay Twilio).
 
 Parada seed de Santiago Demo: `55555555-5555-5555-5555-555555555554` (Templo de Debod).
+
+## Despliegue a producción
+
+Archivos en el repo (rama de trabajo, no sustituyen el compose local):
+
+| Archivo | Uso |
+|---|---|
+| `apps/api/Dockerfile` | API Fastify |
+| `apps/workers/Dockerfile` | Consumers Redis |
+| `apps/web-cliente/Dockerfile` | Build Vite + nginx |
+| `docker-compose.prod.yml` | PostGIS + Redis internos, Caddy en 80/443 |
+| `Caddyfile` | TLS y reverse proxy |
+| `.env.production.example` | Plantilla de secretos (no commitear valores reales) |
+
+```bash
+cp .env.production.example .env.production
+# editar secretos, dominios y DATABASE_URL / REDIS_URL
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+curl -fsS https://api.rutacerca.es/health
+curl -fsS https://api.rutacerca.es/api/ops/health
+```
+
+Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados. Pendiente para un siguiente paso: autenticar `/ws/repartidor`.

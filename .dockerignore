@@ -1,0 +1,17 @@
+node_modules
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+dist
+**/dist
+*.log
+.DS_Store
+coverage
+.turbo
+.vite
+.cursor
+*.md
+!README.md
