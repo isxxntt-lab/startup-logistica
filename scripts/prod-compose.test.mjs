@@ -53,12 +53,13 @@ describe("docker-compose.prod.yml: redes y puertos", () => {
     assert.ok(!Object.hasOwn(services.redis, "ports"));
   });
 
-  it("solo Caddy publica 80/443", () => {
+  it("solo Caddy publica 80/443 TCP y 443/udp", () => {
     for (const [name, svc] of Object.entries(services)) {
       const ports = publishedPorts(svc);
       if (name === "caddy") {
-        assert.ok(ports.some((p) => p.includes("80:80")));
-        assert.ok(ports.some((p) => p.includes("443:443")));
+        assert.ok(ports.some((p) => p === "80:80"));
+        assert.ok(ports.some((p) => p === "443:443"));
+        assert.ok(ports.some((p) => p === "443:443/udp"));
         continue;
       }
       assert.equal(ports.length, 0, `${name} no debe publicar ports`);
@@ -110,9 +111,10 @@ describe("docker-compose.prod.yml: endurecimiento y healthchecks", () => {
         `${name} tmpfs /tmp`,
       );
     }
-    const webTmpfs = (services.web.tmpfs ?? []).map(String);
-    assert.ok(webTmpfs.some((m) => m.startsWith("/var/cache/nginx")));
-    assert.ok(webTmpfs.some((m) => m.startsWith("/run")));
+    const webTmpfs = (services.web.tmpfs ?? []).map((m) => String(m).split(":")[0]);
+    for (const path of ["/var/cache/nginx", "/var/run", "/var/log/nginx", "/var/lib/nginx", "/tmp"]) {
+      assert.ok(webTmpfs.includes(path), `web tmpfs ${path}`);
+    }
   });
 
   it("healthchecks de web, workers y api", () => {
@@ -124,6 +126,10 @@ describe("docker-compose.prod.yml: endurecimiento y healthchecks", () => {
 
     const webTest = JSON.stringify(services.web.healthcheck.test);
     assert.match(webTest, /wget|127\.0\.0\.1/);
+
+    const apiTest = JSON.stringify(services.api.healthcheck.test);
+    assert.match(apiTest, /\/api\/ops\/health/);
+    assert.match(apiTest, /\/health/);
 
     const workerTest = JSON.stringify(services.workers.healthcheck.test);
     assert.match(workerTest, /ioredis/);
@@ -171,6 +177,26 @@ describe("Caddyfile: ACME_EMAIL en bloque global", () => {
 
   it("la plantilla de env documenta ACME_EMAIL", () => {
     assert.match(envExample, /^ACME_EMAIL=/m);
+  });
+
+  it("SITE_TRACKING y SITE_API envían headers de endurecimiento tras reverse_proxy", () => {
+    const tracking = caddyfile.match(
+      /\{\$SITE_TRACKING:[^}]+\} \{[\s\S]*?\n\}/,
+    );
+    const api = caddyfile.match(
+      /\{\$SITE_API:[^}]+\} \{[\s\S]*?\n\}/,
+    );
+    assert.ok(tracking && api, "bloques de sitio");
+    for (const block of [tracking[0], api[0]]) {
+      const proxyAt = block.indexOf("reverse_proxy");
+      const headerAt = block.indexOf("header {");
+      assert.ok(proxyAt >= 0 && headerAt > proxyAt, "header tras reverse_proxy");
+      assert.match(block, /Strict-Transport-Security/);
+      assert.match(block, /X-Content-Type-Options "nosniff"/);
+      assert.match(block, /X-Frame-Options "DENY"/);
+      assert.match(block, /Referrer-Policy "strict-origin-when-cross-origin"/);
+      assert.match(block, /-Server/);
+    }
   });
 });
 

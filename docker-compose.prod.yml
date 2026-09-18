@@ -19,6 +19,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"
     environment:
       SITE_TRACKING: ${SITE_TRACKING:-seguimiento.rutacerca.es}
       SITE_API: ${SITE_API:-api.rutacerca.es}
@@ -50,10 +51,11 @@ services:
     expose:
       - "80"
     tmpfs:
-      - /tmp:mode=1777
-      - /var/cache/nginx:mode=1777
-      - /var/run:mode=1777
-      - /run:mode=1777
+      - /var/cache/nginx
+      - /var/run
+      - /var/log/nginx
+      - /var/lib/nginx
+      - /tmp
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -105,10 +107,8 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/ops/health').then(r=>process.exit(r.ok?0:1)).catch(()=>fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1)))\"",
         ]
       interval: 10s
       timeout: 5s
