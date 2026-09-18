@@ -9,13 +9,14 @@
     ".": "./src/index.ts",
     "./dashboard": "./src/dashboard.ts",
     "./tracking": "./src/tracking.ts",
-    "./ops": "./src/ops/index.ts"
+    "./ops": "./src/ops/index.ts",
+    "./notifications": "./src/notifications/index.ts"
   },
   "scripts": {
     "dev": "node -e \"process.exit(0)\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
-    "test": "tsx --test src/ops/notification-policy.test.ts"
+    "test": "tsx --test src/ops/notification-policy.test.ts src/barrel.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

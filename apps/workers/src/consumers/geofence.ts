@@ -1,8 +1,7 @@
 import {
-  STREAMS,
+  enqueueNotification,
   type LocationUpdated,
   type NotificationRequested,
-  serializeEvent,
 } from "@startup-logistica/shared";
 import {
   closeAttemptDwell,
@@ -156,11 +155,7 @@ export async function handleGeofence(event: LocationUpdated) {
         motivo: "proximidad_geocerca",
         minutosRestantes: 10,
       };
-      await redis.xadd(
-        STREAMS.notifications,
-        "*",
-        ...Object.entries(serializeEvent(notif)).flat(),
-      );
+      await enqueueNotification(redis, notif);
       console.log(`[geofence] entered → aviso_cercania parada=${siguiente.id}`);
     }
   }
@@ -198,3 +193,7 @@ export async function handleGeofence(event: LocationUpdated) {
     console.log(`[geofence] at_delivery parada=${siguiente.id} dwell=${dwellSeconds}s`);
   }
 }
+
+/** Alias para el entrypoint histórico que importaba `onLocationUpdate`. */
+export const onLocationUpdate = handleGeofence;
+

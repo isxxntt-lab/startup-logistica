@@ -1,8 +1,4 @@
-import {
-  STREAMS,
-  type ParadaCompleted,
-  serializeEvent,
-} from "@startup-logistica/shared";
+import { enqueueNotification, type ParadaCompleted } from "@startup-logistica/shared";
 import { pool } from "../db.js";
 import { redis } from "../redis.js";
 
@@ -20,18 +16,12 @@ export async function handleRouteProgress(event: ParadaCompleted) {
   for (const parada of rows) {
     const restantes = parada.orden - event.orden;
     if (restantes === UMBRAL_PARADAS) {
-      await redis.xadd(
-        STREAMS.notifications,
-        "*",
-        ...Object.entries(
-          serializeEvent({
-            type: "NOTIFICATION_REQUESTED",
-            paradaId: parada.id,
-            motivo: "faltan_n_paradas",
-            paradasRestantes: UMBRAL_PARADAS,
-          }),
-        ).flat(),
-      );
+      await enqueueNotification(redis, {
+        type: "NOTIFICATION_REQUESTED",
+        paradaId: parada.id,
+        motivo: "faltan_n_paradas",
+        paradasRestantes: UMBRAL_PARADAS,
+      });
     }
   }
 }

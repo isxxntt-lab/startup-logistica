@@ -1,11 +1,20 @@
 import type { EstadoParada } from "./types.js";
+import { ENLACE_YA_NO_VALIDO } from "./tracking-token.js";
+
+export { ENLACE_YA_NO_VALIDO, TRACKING_ACTIONS, trackingApiPath } from "./tracking-token.js";
+export type { TrackingAction } from "./tracking-token.js";
 
 export type GoneReason = "expired" | "used";
 
 export type TrackingGoneBody = {
   error: "gone";
   reason: GoneReason;
+  code: typeof ENLACE_YA_NO_VALIDO;
 };
+
+export function trackingGoneBody(reason: GoneReason): TrackingGoneBody {
+  return { error: "gone", reason, code: ENLACE_YA_NO_VALIDO };
+}
 
 export type TrackingSessionStatus =
   | "pending"

@@ -81,4 +81,9 @@ Esto **no** se cierra con un merge. No hay diff que lo sustituya. Grey no lo “
 | Dry-run de restore | Otra instancia/volumen, **nunca** `pgdata_prod`. `CONFIRM=yes` + `verify-postgis.sql` **antes** de go-live. Detalle: `deploy/BACKUP_RESTORE.md`. |
 | Smoke E2E de staging | Compose local + seed. `deploy/STAGING_SMOKE.md`. **Antes** de DNS A/AAAA público. Healthcheck opcional: `STAGING_BASE` + `STAGING_SMOKE=1`. Twilio/Meta vacíos (dry-run). Sin ACME. |
 
-Pasos de arranque: `deploy/DEPLOY_PLAN_MANANA.md`. Smoke staging: `deploy/STAGING_SMOKE.md`. Checklist: `deploy/SECURITY_CHECKLIST.md`.
+Pasos de arranque: `deploy/DEPLOY_PLAN_MANANA.md`. Smoke staging: `deploy/STAGING_SMOKE.md`. Checklist: `deploy/SECURITY_CHECKLIST.md`. HTTPS local del compose prod: `deploy/LOCAL_HTTPS.md`.
+
+## Runtime del stack prod (follow-up, no cambia el orden #4–#13)
+
+Tras el merge a `main`, el compose prod debe **construir** api/web/workers sin chocar con `node_modules` de pnpm, exportar el barrel de shared que api/workers importan, alinear el consumer de geocerca, y arrancar nginx unprivileged con tmpfs `uid=101`. TLS interno es un **override** (`docker-compose.prod.local.yml` + `Caddyfile.local`), no un cambio permanente del Caddyfile ACME.
+

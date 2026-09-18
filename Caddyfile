@@ -3,6 +3,10 @@
 # Sustituye los dominios con SITE_TRACKING y SITE_API (ver .env.production.example).
 # ACME_EMAIL: avisos de caducidad de Let's Encrypt (bloque global).
 #
+# Smoke local sin Let's Encrypt: Caddyfile.local + docker-compose.prod.local.yml
+# (localhost / api.localhost). Ver deploy/LOCAL_HTTPS.md.
+# El override local añade certificados internos; este fichero sigue con ACME.
+#
 # Variante un solo host (descomenta el bloque final y comenta los dos primeros):
 #   PUBLIC_WEB_URL=https://app.rutacerca.es
 #   VITE_API_URL=   (vacío: el SPA llama a /api en el mismo origen)

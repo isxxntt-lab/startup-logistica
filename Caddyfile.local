@@ -1,0 +1,36 @@
+# TLS interno para smoke local (localhost / api.localhost).
+# NO montar este fichero en el VPS: el Caddyfile de producción sigue con ACME.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+#     --env-file .env.production up -d --build
+
+{
+	email {$ACME_EMAIL:ops@localhost}
+	local_certs
+}
+
+{$SITE_TRACKING:localhost} {
+	tls internal
+	encode gzip
+	reverse_proxy web:8080
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+{$SITE_API:api.localhost} {
+	tls internal
+	encode gzip
+	reverse_proxy api:3000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

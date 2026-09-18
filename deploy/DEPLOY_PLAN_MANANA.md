@@ -20,3 +20,5 @@ PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Orden de merge
 10. Smoke de prod (ya validado en staging): tracking `?token=`, **Estaré ahí** (`/api/tracking/confirm-presence`), `POST /api/ops/checks`. `GET /repartidor/<id>/ruta-hoy` sin `x-api-key` debe ser **401**.
 11. Revisar `ops_alerts` `open` = 0 críticos (`GET /api/ops/health` → `openCriticalAlerts`).
 12. Rollback: `docker compose -f docker-compose.prod.yml --env-file .env.production down` + imagen/`IMAGE` anterior si etiquetaste builds. Datos: restaurar el dump previo (`CONFIRM=yes`).
+
+Smoke local del **mismo** compose (sin DNS/ACME): `deploy/LOCAL_HTTPS.md` (`-f docker-compose.prod.local.yml`). No usar ese override en el VPS.

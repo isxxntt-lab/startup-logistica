@@ -94,17 +94,19 @@ INSERT INTO delivery_attempts (
   parada_id, attempt_number, started_at, completed_at, status, failure_avoided, avoidance_channel
 )
 SELECT
-  '55555555-5555-5555-5555-555555555551',
+  p.id,
   1,
   now() - interval '55 minutes',
   now() - interval '40 minutes',
   'delivered',
   true,
   'whatsapp'
-WHERE NOT EXISTS (
-  SELECT 1 FROM delivery_attempts
-  WHERE parada_id = '55555555-5555-5555-5555-555555555551'
-);
+FROM paradas p
+WHERE p.id = '55555555-5555-5555-5555-555555555551'
+  AND NOT EXISTS (
+    SELECT 1 FROM delivery_attempts da
+    WHERE da.parada_id = p.id AND da.attempt_number = 1
+  );
 
 UPDATE paradas
 SET first_attempt_success = true,

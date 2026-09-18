@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   assertTransicion,
+  ENLACE_YA_NO_VALIDO,
   type EstadoParada,
   repartidorChannel,
 } from "@startup-logistica/shared";
@@ -97,6 +98,17 @@ function clienteErrorStatus(err: unknown): number {
   if (err instanceof ClienteAuthError) return err.statusCode;
   if ((err as { name?: string }).name === "TransicionParadaInvalida") return 409;
   return (err as { statusCode?: number }).statusCode ?? 400;
+}
+
+function clienteErrorBody(err: unknown): {
+  error: string;
+  code?: typeof ENLACE_YA_NO_VALIDO;
+} {
+  const body: { error: string; code?: typeof ENLACE_YA_NO_VALIDO } = {
+    error: (err as Error).message,
+  };
+  if (clienteErrorStatus(err) === 410) body.code = ENLACE_YA_NO_VALIDO;
+  return body;
 }
 
 async function aplicarRespuestaCliente(
@@ -205,8 +217,7 @@ export async function clienteRoutes(app: FastifyInstance) {
       };
     } catch (err) {
       await logTrackingAuthError(err);
-      const status = clienteErrorStatus(err);
-      return reply.code(status).send({ error: (err as Error).message });
+      return reply.code(clienteErrorStatus(err)).send(clienteErrorBody(err));
     }
   });
 
@@ -232,8 +243,7 @@ export async function clienteRoutes(app: FastifyInstance) {
       return { puntos: rows };
     } catch (err) {
       await logTrackingAuthError(err);
-      const status = clienteErrorStatus(err);
-      return reply.code(status).send({ error: (err as Error).message });
+      return reply.code(clienteErrorStatus(err)).send(clienteErrorBody(err));
     }
   });
 
@@ -251,7 +261,7 @@ export async function clienteRoutes(app: FastifyInstance) {
       return await aplicarRespuestaCliente(parada, parsed.data);
     } catch (err) {
       await logTrackingAuthError(err);
-      return reply.code(clienteErrorStatus(err)).send({ error: (err as Error).message });
+      return reply.code(clienteErrorStatus(err)).send(clienteErrorBody(err));
     }
   });
 
@@ -265,7 +275,7 @@ export async function clienteRoutes(app: FastifyInstance) {
       return await aplicarRespuestaCliente(parada, { accion: "confirmado" });
     } catch (err) {
       await logTrackingAuthError(err);
-      return reply.code(clienteErrorStatus(err)).send({ error: (err as Error).message });
+      return reply.code(clienteErrorStatus(err)).send(clienteErrorBody(err));
     }
   });
 
@@ -284,7 +294,7 @@ export async function clienteRoutes(app: FastifyInstance) {
       });
     } catch (err) {
       await logTrackingAuthError(err);
-      return reply.code(clienteErrorStatus(err)).send({ error: (err as Error).message });
+      return reply.code(clienteErrorStatus(err)).send(clienteErrorBody(err));
     }
   });
 }
