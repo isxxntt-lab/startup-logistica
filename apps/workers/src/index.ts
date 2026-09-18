@@ -1,6 +1,9 @@
 import {
   CONSUMER_GROUPS,
   STREAMS,
+  applyOpsSchema,
+  initOps,
+  withCorrelation,
   type DomainEvent,
 } from "@startup-logistica/shared";
 import { consumeStream } from "./consume.js";
@@ -8,6 +11,10 @@ import { handleNotification } from "./consumers/notifications.js";
 import { handleWebhook } from "./consumers/webhooks.js";
 import { handleGeofence } from "./consumers/geofence.js";
 import { handleRouteProgress } from "./consumers/route-progress.js";
+import { pool } from "./db.js";
+
+initOps(pool);
+await applyOpsSchema(pool);
 
 const consumerName = `worker-${process.pid}`;
 

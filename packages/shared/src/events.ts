@@ -26,6 +26,8 @@ export type NotificationRequested = {
   paradasRestantes?: number;
   minutosRestantes?: number;
   eta?: string;
+  channel?: "whatsapp" | "sms" | "call" | "app";
+  fallbackOfJobId?: string;
 };
 
 export type WebhookReceived = {

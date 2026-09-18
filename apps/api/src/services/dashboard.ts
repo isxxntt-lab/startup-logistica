@@ -1,5 +1,6 @@
 import {
   ESTADO_A_DELIVERY_STATUS,
+  getOpsMetrics,
   type DashboardFilters,
   type DashboardPayload,
   type Delivery,
@@ -117,22 +118,28 @@ async function kpisFor(
   const dwell = Number(dwellRows[0]?.avg_dwell ?? 0);
   const denomAvoid = avoided + failed;
 
+  const ops = await getOpsMetrics(pool, {
+    from: `${from}T00:00:00.000Z`,
+    to: `${to}T23:59:59.999Z`,
+    agenciaId,
+  });
+
   return {
     period: { from, to },
     totalDeliveries: total,
     deliveredCount: delivered,
     failedCount: failed,
-    failedDeliveriesAvoided: avoided,
-    failedDeliveriesAvoidedRate: denomAvoid ? round(avoided / denomAvoid) : 0,
-    avgGeofenceDwellSeconds: round(dwell, 1),
-    avgGeofenceDwellMinutes: round(dwell / 60, 2),
+    failedDeliveriesAvoided: ops.failureAvoided.count,
+    failedDeliveriesAvoidedRate: ops.failureAvoided.rate,
+    avgGeofenceDwellSeconds: ops.dwell.avgSeconds ?? round(dwell, 1),
+    avgGeofenceDwellMinutes: ops.dwell.avgMinutes ?? round(dwell / 60, 2),
     firstAttemptSuccessRate: firstTotal ? round(firstOk / firstTotal) : 0,
     firstAttemptSuccessCount: firstOk,
     firstAttemptTotal: firstTotal,
     onTimeRate: delivered ? round(onTime / delivered) : 0,
     avgAttemptsToDeliver: round(Number(attemptsRows[0]?.avg_attempts ?? 0), 2),
     activeCouriers: liveRows[0]?.couriers ?? 0,
-    inGeofenceNow: liveRows[0]?.live ?? 0,
+    inGeofenceNow: ops.system.inGeofenceNow,
   };
 }
 

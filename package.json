@@ -11,6 +11,8 @@
     "dev:repartidor": "pnpm --filter @startup-logistica/web-repartidor dev",
     "dev:dashboard": "pnpm --filter @startup-logistica/web-dashboard dev",
     "demo:geocerca": "pnpm --filter @startup-logistica/api demo:geocerca",
+    "ops:checks": "pnpm --filter @startup-logistica/api ops:checks",
+    "test": "pnpm --filter @startup-logistica/api test",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck"
   },

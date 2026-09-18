@@ -1,6 +1,7 @@
 import {
   CONSUMER_GROUPS,
   parseEvent,
+  withCorrelation,
   type DomainEvent,
 } from "@startup-logistica/shared";
 import { redis } from "./redis.js";
@@ -46,7 +47,9 @@ export async function consumeStream(opts: {
               fields[fieldArr[i]] = fieldArr[i + 1];
             }
             try {
-              await opts.handler(parseEvent(fields), id);
+              await withCorrelation(async () => {
+                await opts.handler(parseEvent(fields), id);
+              });
               await client.xack(opts.stream, opts.group, id);
             } catch (err) {
               console.error(`[${opts.group}] fallo ${id}`, err);
