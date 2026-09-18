@@ -1,10 +1,10 @@
 # Plan de despliegue — mañana
 
-PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de contenedores: **PR #4**. Go-live ops + auth WS: **PR #5**. Compose endurecido: **PR #6**. Auth HTTP `/repartidor/*`: **PR #7**. Este follow-up: contenedores non-root (UID ≠ 0). Backup/restore PostGIS: este PR (`deploy/BACKUP_RESTORE.md`).
+PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Orden de merge y qué verifica Grey: **`deploy/MERGE_ORDER.md`** (`#4 → #5 → #6 → #7 → #8 → #9 → #10`). #9 (quiet hours) está sobre #7: **rebase sobre #10** (o sobre #8 si se inserta entre #8 y #10). `ACME_EMAIL` real, agencia sin seed y DNS/TLS son **operacional en el VPS**, no un diff.
 
-1. Merge PR #4, #5, #6, #7, non-root y este follow-up de backup (o desplegar el SHA que los incluya).
-2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG, `ACME_EMAIL` real). No commitear el fichero.
-3. DNS: `SITE_TRACKING` y `SITE_API` → IP del VPS; abrir 80/443.
+1. Merge según `deploy/MERGE_ORDER.md` (o desplegar el SHA que los incluya, con `COPY --chown=101:101` del `dist` de web).
+2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG, `ACME_EMAIL` real). No commitear el fichero. Esto es VPS, no código.
+3. DNS: `SITE_TRACKING` y `SITE_API` → IP del VPS; abrir 80/443. TLS/ACME es operacional.
 4. Crear agencia de prod a mano (hash SHA-256 de la API key). Prod **no** monta `infra/postgres/02-seed.sql`.
 5. Arranque:
 

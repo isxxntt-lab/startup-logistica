@@ -239,11 +239,12 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 |---|---|
 | `apps/api/Dockerfile` | API Fastify |
 | `apps/workers/Dockerfile` | Consumers Redis |
-| `apps/web-cliente/Dockerfile` | Build Vite + nginx unprivileged (`USER 101`, :8080) |
+| `apps/web-cliente/Dockerfile` | Build Vite + nginx unprivileged (`USER 101`, :8080, `COPY --chown=101:101` del `dist`) |
 | `docker-compose.prod.yml` | PostGIS + Redis internos, Caddy en 80/443 |
 | `Caddyfile` | TLS y reverse proxy |
 | `.env.production.example` | Plantilla de secretos (no commitear valores reales) |
 | `deploy/SECURITY_CHECKLIST.md` | Checklist de endurecimiento |
+| `deploy/MERGE_ORDER.md` | Orden #4→#10, qué verifica Grey, rebase de #9, VPS ≠ código |
 | `deploy/DEPLOY_PLAN_MANANA.md` | Pasos de go-live |
 | `deploy/BACKUP_RESTORE.md` | Backup/restore PostGIS: frecuencia, retención, dry-run en staging |
 | `scripts/prod-healthcheck.sh` | Smoke `/health`, ops y SPA |

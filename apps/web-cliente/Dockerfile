@@ -24,6 +24,6 @@ RUN pnpm --filter @startup-logistica/web-cliente build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY apps/web-cliente/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/apps/web-cliente/dist /usr/share/nginx/html
+COPY --from=build --chown=101:101 /app/apps/web-cliente/dist /usr/share/nginx/html
 USER 101
 EXPOSE 8080

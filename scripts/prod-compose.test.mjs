@@ -239,6 +239,14 @@ describe("contenedores non-root (USER ≠ 0)", () => {
     assert.match(df, /nginxinc\/nginx-unprivileged:1\.27-alpine/);
     assert.match(df, /USER 101/);
     assert.equal(lastUserInstruction(df), "101");
+    assert.match(
+      df,
+      /COPY --from=build --chown=101:101 \/app\/apps\/web-cliente\/dist \/usr\/share\/nginx\/html/,
+    );
+    assert.doesNotMatch(
+      df,
+      /^COPY --from=build \/app\/apps\/web-cliente\/dist /m,
+    );
     assert.match(df, /EXPOSE 8080/);
     assert.doesNotMatch(df, /EXPOSE 80\b/);
     assert.doesNotMatch(df, /^\s*USER\s+0\b/m);
@@ -294,5 +302,21 @@ describe("docker compose config (si hay binario)", () => {
     );
     assert.match(result, /read_only:\s*true/);
     assert.match(result, /ACME_EMAIL/);
+  });
+});
+
+describe("orden de merge y operacional VPS", () => {
+  it("MERGE_ORDER documenta #4→#10, rebase de #9 y que el VPS no es diff", () => {
+    const src = readFileSync(join(root, "deploy", "MERGE_ORDER.md"), "utf8");
+    assert.match(src, /#4 → #5 → #6 → #7 → #8 → #9 → #10/);
+    assert.match(src, /#9 no incluye #8 ni #10/);
+    assert.match(src, /Rebase #9 sobre ese head/);
+    assert.match(src, /COPY --from=build --chown=101:101/);
+    assert.match(src, /Operacional en el VPS — no es código/);
+    assert.match(src, /ACME_EMAIL/);
+    assert.match(src, /02-seed\.sql/);
+    assert.match(src, /SITE_TRACKING/);
+    assert.match(src, /SITE_API/);
+    assert.match(src, /no usar `demo-api-key`/i);
   });
 });
