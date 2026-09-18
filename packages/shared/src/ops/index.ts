@@ -4,3 +4,4 @@ export * from "./alerts.js";
 export * from "./metrics.js";
 export * from "./schema.js";
 export * from "./attempts.js";
+export * from "./notification-policy.js";

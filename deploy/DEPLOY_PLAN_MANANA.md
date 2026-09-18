@@ -1,8 +1,8 @@
 # Plan de despliegue — mañana
 
-PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de contenedores: **PR #4**. Go-live ops + auth WS: **PR #5**. Compose endurecido: **PR #6**. Este follow-up cierra auth HTTP de `/repartidor/*`.
+PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Infra de contenedores: **PR #4**. Go-live ops + auth WS: **PR #5**. Compose endurecido: **PR #6**. Auth HTTP `/repartidor/*`: **PR #7**. Este follow-up (apilado sobre #7) añade quiet hours y consentimiento WA/SMS en el worker.
 
-1. Merge PR #4, #5, #6 y este follow-up (o desplegar el SHA que los incluya).
+1. Merge PR #4, #5, #6, #7 y este follow-up (o desplegar el SHA que los incluya).
 2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG, `ACME_EMAIL` real). No commitear el fichero.
 3. DNS: `SITE_TRACKING` y `SITE_API` → IP del VPS; abrir 80/443.
 4. Crear agencia de prod a mano (hash SHA-256 de la API key). Prod **no** monta `infra/postgres/02-seed.sql`.

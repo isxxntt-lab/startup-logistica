@@ -1,8 +1,8 @@
 # Checklist seguridad producción
 
-Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. Este PR cierra auth HTTP de `/repartidor/*`.
+Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. #7 cierra auth HTTP de `/repartidor/*`. Este PR (apilado sobre #7) cubre quiet hours y consentimiento WA/SMS en el worker.
 
-## Cubierto en código / compose (#4 + #5 + #6 + este PR)
+## Cubierto en código / compose (#4 + #5 + #6 + #7 + este PR)
 
 - [x] `.env.production` no está en git; solo `.env.production.example`
 - [x] Postgres/Redis sin `ports` públicos (solo red `internal` en `docker-compose.prod.yml`)
@@ -18,6 +18,7 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] `read_only: true` + `no-new-privileges` + `tmpfs` en caddy/web/api/workers/redis (Postgres no es read-only: escribe el datadir)
 - [x] Healthchecks de `web` (HTTP nginx) y `workers` (ping Redis + `SELECT 1` en Postgres)
 - [x] Email ACME en Caddy (`ACME_EMAIL` / bloque global `{ email ... }`)
+- [x] Quiet hours Europe/Madrid 22:00–08:00: el worker aplaza SMS/WhatsApp (`notification_jobs.pending` + `next_retry_at` a las 08:00); push (`app`) se envía. Sin consentimiento o canal caído: `skipped` y fallback WA→SMS solo si el siguiente canal tiene consentimiento y está disponible (no se spamea)
 
 ## Operacional (hacer en el VPS, no es diff)
 
@@ -28,7 +29,7 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 
 ## Pendiente (fuera de este PR)
 
-- [ ] Quiet hours / consentimiento WA–SMS (el worker no implementa franja horaria)
-- [ ] Backup + restore de Postgres (procedimiento y prueba de restore)
-- [ ] TTL tracking 48h: el gate y la huella en logs ya existen; no se cambia la política en este PR
+- [ ] Backup + restore de Postgres (procedimiento documentado y prueba de restore en el VPS)
+- [ ] TTL tracking 48h: política de producto (el gate, `token_expira_at` y la huella en logs ya existen; no se cambia la caducidad aquí)
+- [ ] DNS/TLS en el VPS: apuntar `SITE_TRACKING` y `SITE_API` y esperar certificados ACME
 - [ ] Rotar `x-api-key` / `OPS_TOKEN` y restringir quién llama a `/api/ops/*`

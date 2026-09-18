@@ -8,7 +8,8 @@
     "start": "tsx --env-file ../../.env src/index.ts",
     "start:prod": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "test": "tsx --test src/consumers/notifications-plan.test.ts"
   },
   "dependencies": {
     "@startup-logistica/shared": "workspace:*",

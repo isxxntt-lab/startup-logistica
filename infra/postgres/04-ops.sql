@@ -134,3 +134,21 @@ CREATE INDEX IF NOT EXISTS idx_ops_alerts_code ON ops_alerts (code, created_at D
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_ops_alerts_open_dedupe
   ON ops_alerts (code, dedupe_key)
   WHERE status = 'open';
+
+-- Consentimiento por parada (NULL = no consta → el worker no envía ese canal).
+ALTER TABLE paradas
+  ADD COLUMN IF NOT EXISTS consent_whatsapp BOOLEAN,
+  ADD COLUMN IF NOT EXISTS consent_sms BOOLEAN,
+  ADD COLUMN IF NOT EXISTS consent_push BOOLEAN;
+
+-- Demo seed: el destinatario de las paradas de Madrid acepta WA + SMS + push.
+UPDATE paradas
+SET consent_whatsapp = COALESCE(consent_whatsapp, true),
+    consent_sms = COALESCE(consent_sms, true),
+    consent_push = COALESCE(consent_push, true)
+WHERE id IN (
+  '55555555-5555-5555-5555-555555555551',
+  '55555555-5555-5555-5555-555555555552',
+  '55555555-5555-5555-5555-555555555553',
+  '55555555-5555-5555-5555-555555555554'
+);
