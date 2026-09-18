@@ -1,6 +1,6 @@
 # Checklist seguridad producción
 
-Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. #7 cierra auth HTTP de `/repartidor/*`. Non-root: PR #8. Backup/restore: PR #10. Chown dist web: PR #11. Este PR rebasea quiet hours (#9) sobre #11.
+Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. #7 cierra auth HTTP de `/repartidor/*`. Non-root: PR #8. Backup/restore: PR #10. Chown dist web: PR #11. #12 rebasea quiet hours (#9) sobre #11. Este PR documenta el smoke staging E2E (`deploy/STAGING_SMOKE.md`) **antes de DNS público**.
 
 ## Cubierto en código / compose (#4–#11 + quiet hours)
 
@@ -23,15 +23,17 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] Scripts de backup/restore PostGIS (`scripts/backup-postgres.sh`, `scripts/restore-postgres.sh`) + runbook `deploy/BACKUP_RESTORE.md`
 - [x] Quiet hours Europe/Madrid 22:00–08:00: el worker aplaza SMS/WhatsApp (`notification_jobs.pending` + `next_retry_at` a las 08:00); push (`app`) se envía. Sin consentimiento o canal caído: `skipped` y fallback WA→SMS solo si el siguiente canal tiene consentimiento y está disponible (no se spamea)
 - [x] `RESUME_ERROR` en el poll de jobs aplazados: backoff `next_retry_at` 30s → 2m → 10m; `status=failed` al cuarto intento (no queda `pending` reintentando cada poll)
+- [x] Smoke staging E2E documentado (`deploy/STAGING_SMOKE.md`) y pasos opcionales en `scripts/prod-healthcheck.sh` (`STAGING_BASE`, `STAGING_SMOKE=1`). Sin Twilio/Meta/ACME reales. **Antes de DNS público.**
 
 ## Operacional (hacer en el VPS, no es diff)
 
-Grey no cierra esto en GitHub. `ACME_EMAIL` real, agencia sin seed y DNS/TLS no salen de un merge.
+Grey no cierra esto en GitHub. `ACME_EMAIL` real, agencia sin seed y DNS/TLS no salen de un merge. El smoke staging E2E se corre en compose **local** (`deploy/STAGING_SMOKE.md`), no en el VPS.
 
 - [ ] `JWT_MASTER_SECRET`, `OPS_TOKEN`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD` generados con CSPRNG (≥32 bytes)
 - [ ] API key de agencia real (prod **no** carga `02-seed.sql`; no usar `demo-api-key`)
 - [ ] DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy TLS (Let's Encrypt) con `ACME_EMAIL` real
 - [ ] Healthchecks verdes (`./scripts/prod-healthcheck.sh`) **antes** de abrir DNS público
+- [ ] Smoke staging E2E (`deploy/STAGING_SMOKE.md`) verde **antes** de DNS A/AAAA público: geocerca, notificación dry-run (Twilio/Meta vacíos), `confirm-presence`, métricas `failureAvoided`/`dwell`, backup + restore `PLAN=1`. Sin ACME real.
 - [ ] Dry-run de restore en staging (u otro Postgres throwaway, **nunca** `pgdata_prod`): backup → `CONFIRM=yes` restore → `scripts/verify-postgis.sql` (`PostGIS_Version`, `geography_columns`, `ST_DWithin`) **antes** de go-live
 
 ## Pendiente (fuera de este PR)

@@ -267,7 +267,8 @@ Archivos en el repo (rama de trabajo, no sustituyen el compose local):
 | `deploy/MERGE_ORDER.md` | Orden #4→#11, #9 rebaseado sobre #11, qué verifica Grey, VPS ≠ código |
 | `deploy/DEPLOY_PLAN_MANANA.md` | Pasos de go-live |
 | `deploy/BACKUP_RESTORE.md` | Backup/restore PostGIS: frecuencia, retención, dry-run en staging |
-| `scripts/prod-healthcheck.sh` | Smoke `/health`, ops y SPA |
+| `deploy/STAGING_SMOKE.md` | Smoke E2E de staging **antes de DNS público** (geocerca, dry-run, confirm-presence, métricas, `PLAN=1`) |
+| `scripts/prod-healthcheck.sh` | Smoke `/health`, ops y SPA; E2E opcional con `STAGING_BASE` + `STAGING_SMOKE=1` |
 | `scripts/backup-postgres.sh` | `pg_dump` con timestamp (`.env.production`) |
 | `scripts/restore-postgres.sh` | Restore destructivo (`CONFIRM=yes`) |
 
@@ -276,6 +277,13 @@ cp .env.production.example .env.production
 # editar secretos, dominios y DATABASE_URL / REDIS_URL
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ./scripts/prod-healthcheck.sh https://api.rutacerca.es https://seguimiento.rutacerca.es
+```
+
+Smoke staging **antes de DNS público** (compose local, Twilio vacío, sin ACME): `deploy/STAGING_SMOKE.md`.
+
+```bash
+STAGING_BASE=http://localhost:3000 STAGING_SMOKE=1 AGENCY_API_KEY=demo-api-key \
+  ./scripts/prod-healthcheck.sh
 ```
 
 Postgres de prod **no** carga `02-seed.sql`. Crea la agencia y el `api_key_hash` a mano. DNS A/AAAA de `SITE_TRACKING` y `SITE_API` al VPS; Caddy saca certificados con `ACME_EMAIL`. PostGIS/Redis solo en red `internal`; la API está en `edge`+`internal`. `/ws/repartidor` y HTTP `/repartidor/*` exigen API key de agencia (`x-api-key`; el WS también acepta mensaje `auth`).
