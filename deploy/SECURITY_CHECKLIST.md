@@ -2,7 +2,7 @@
 
 Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. Este PR cierra auth HTTP de `/repartidor/*`.
 
-## Cubierto en código / compose (#4 + #5 + este PR)
+## Cubierto en código / compose (#4 + #5 + #6 + este PR)
 
 - [x] `.env.production` no está en git; solo `.env.production.example`
 - [x] Postgres/Redis sin `ports` públicos (solo red `internal` en `docker-compose.prod.yml`)
