@@ -15,6 +15,9 @@ const crearParadaSchema = z.object({
   lat: z.number(),
   lon: z.number(),
   referencia_pedido: z.string().optional(),
+  consent_whatsapp: z.boolean().optional(),
+  consent_sms: z.boolean().optional(),
+  consent_push: z.boolean().optional(),
 });
 
 export async function agenciaRoutes(app: FastifyInstance) {
@@ -94,9 +97,11 @@ export async function agenciaRoutes(app: FastifyInstance) {
 
     const { rows } = await pool.query(
       `INSERT INTO paradas (
-         ruta_id, orden, referencia_pedido, cliente_nombre, cliente_telefono, direccion_texto, ubicacion
+         ruta_id, orden, referencia_pedido, cliente_nombre, cliente_telefono, direccion_texto, ubicacion,
+         consent_whatsapp, consent_sms, consent_push
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography
+         $1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography,
+         $9, $10, $11
        )
        RETURNING id`,
       [
@@ -108,6 +113,9 @@ export async function agenciaRoutes(app: FastifyInstance) {
         body.data.direccion_texto,
         body.data.lon,
         body.data.lat,
+        body.data.consent_whatsapp ?? null,
+        body.data.consent_sms ?? null,
+        body.data.consent_push ?? null,
       ],
     );
     return { id: rows[0].id };

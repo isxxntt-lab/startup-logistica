@@ -1,8 +1,8 @@
 # Plan de despliegue — mañana
 
-PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Orden de merge y qué verifica Grey: **`deploy/MERGE_ORDER.md`** (`#4 → #5 → #6 → #7 → #8 → #9 → #10`). #9 (quiet hours) está sobre #7: **rebase sobre #10** (o sobre #8 si se inserta entre #8 y #10). `ACME_EMAIL` real, agencia sin seed y DNS/TLS son **operacional en el VPS**, no un diff.
+PRs #1 (web-cliente), #2 (ops) y #3 (README) ya están en `main`. Orden de merge y qué verifica Grey: **`deploy/MERGE_ORDER.md`** (`#4 → #5 → #6 → #7 → #8 → #10 → #11`, con **#9 rebaseado sobre #11**). `ACME_EMAIL` real, agencia sin seed y DNS/TLS son **operacional en el VPS**, no un diff.
 
-1. Merge según `deploy/MERGE_ORDER.md` (o desplegar el SHA que los incluya, con `COPY --chown=101:101` del `dist` de web).
+1. Merge según `deploy/MERGE_ORDER.md` (o desplegar el SHA que los incluya: non-root, backup/restore, `COPY --chown=101:101` del `dist` de web, quiet hours).
 2. Completar `.env.production` desde `.env.production.example` (secretos reales, CSPRNG, `ACME_EMAIL` real). No commitear el fichero. Esto es VPS, no código.
 3. DNS: `SITE_TRACKING` y `SITE_API` → IP del VPS; abrir 80/443. TLS/ACME es operacional.
 4. Crear agencia de prod a mano (hash SHA-256 de la API key). Prod **no** monta `infra/postgres/02-seed.sql`.

@@ -1,8 +1,8 @@
 # Checklist seguridad producción
 
-Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. #7 cierra auth HTTP de `/repartidor/*`. Non-root: PR #8. Backup/restore: PR #10. Orden de merge y rebase de #9: `deploy/MERGE_ORDER.md`. Este follow-up: `COPY --chown=101:101` del `dist` de web.
+Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit del poll y auth de `/ws/repartidor`. #6 endurece compose (read_only, healthchecks, redes) y ACME en Caddy. #7 cierra auth HTTP de `/repartidor/*`. Non-root: PR #8. Backup/restore: PR #10. Chown dist web: PR #11. Este PR rebasea quiet hours (#9) sobre #11.
 
-## Cubierto en código / compose (#4–#8 + backup/restore + chown)
+## Cubierto en código / compose (#4–#11 + quiet hours)
 
 - [x] `.env.production` no está en git; solo `.env.production.example`
 - [x] Postgres/Redis sin `ports` públicos (solo red `internal` en `docker-compose.prod.yml`)
@@ -21,6 +21,7 @@ Infra Docker/Caddy: PR #4. Follow-up #5: ops docs, healthcheck HTTP, rate-limit 
 - [x] USER ≠ 0 en api/workers (`USER 10001:10001`, usuario `app`) y web (`nginxinc/nginx-unprivileged`, `USER 101`, `listen 8080`)
 - [x] `COPY --from=build --chown=101:101` del `dist` en `apps/web-cliente/Dockerfile` (html servido por UID 101)
 - [x] Scripts de backup/restore PostGIS (`scripts/backup-postgres.sh`, `scripts/restore-postgres.sh`) + runbook `deploy/BACKUP_RESTORE.md`
+- [x] Quiet hours Europe/Madrid 22:00–08:00: el worker aplaza SMS/WhatsApp (`notification_jobs.pending` + `next_retry_at` a las 08:00); push (`app`) se envía. Sin consentimiento o canal caído: `skipped` y fallback WA→SMS solo si el siguiente canal tiene consentimiento y está disponible (no se spamea)
 
 ## Operacional (hacer en el VPS, no es diff)
 
@@ -34,6 +35,5 @@ Grey no cierra esto en GitHub. `ACME_EMAIL` real, agencia sin seed y DNS/TLS no 
 
 ## Pendiente (fuera de este PR)
 
-- [ ] Quiet hours / consentimiento WA–SMS (el worker no implementa franja horaria)
 - [ ] TTL tracking 48h: el gate y la huella en logs ya existen; no se cambia la política en este PR
 - [ ] Rotar `x-api-key` / `OPS_TOKEN` y restringir quién llama a `/api/ops/*`
