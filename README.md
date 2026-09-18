@@ -184,7 +184,7 @@ Instrumentación en API y workers. Tablas: `ops_logs`, `ops_alerts`, `notificati
 
 ### Logs
 
-Cada request lleva `X-Correlation-Id` (se genera si falta). Categorías: `webhook`, `delivery_status`, `notification_fallback`, `geocerca`, `tracking_token`, `system`. Payloads sensibles (`token`, `authorization`, …) se sustituyen por huella.
+Cada request lleva `X-Correlation-Id` (se genera si falta). Categorías: `webhook`, `delivery_status`, `notification_fallback`, `geofence`, `tracking_token`, `system`. Payloads sensibles (`token`, `authorization`, …) se sustituyen por huella.
 
 ### Alertas
 
