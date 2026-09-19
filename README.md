@@ -95,13 +95,16 @@ pnpm dev:dashboard   # opcional
 
 | Servicio | URL |
 |---|---|
-| API health | http://localhost:3000/health |
+| API health (liveness) | http://localhost:3000/health |
+| API readiness (DB + PostGIS) | http://localhost:3000/health/ready |
 | Ops health | http://localhost:3000/api/ops/health |
 | Web cliente | http://localhost:5173/?token=… |
 | App repartidor | http://localhost:5174 |
 | Dashboard | http://localhost:5175 |
 
 `docker compose` publica Postgres en `5432` y Redis en `6379`. El init monta `infra/postgres/` (schema + seed + ops). API y workers vuelven a aplicar `04-ops.sql` al arrancar (idempotente).
+
+Al arrancar, API y workers ejecutan un **bootstrap de base de datos** compartido (`@startup-logistica/shared/db`): esperan a que Postgres acepte conexiones (backoff exponencial) y garantizan de forma idempotente las extensiones `postgis` y `pgcrypto` antes de aplicar migraciones. Esto evita crasheos cuando Postgres aún está arrancando y cubre bases gestionadas o volúmenes preexistentes donde `01-schema.sql` no vuelve a ejecutarse. `GET /health/ready` devuelve `503` si la base no responde o falta PostGIS, y los pools de `pg` registran `pool.on('error')` para que un error en un cliente idle no tumbe el proceso. Variables opcionales de TLS/tuning en `.env.example` (`DATABASE_SSL`, `PGPOOL_*`).
 
 Variables relevantes (ver `.env.example`):
 

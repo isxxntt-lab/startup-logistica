@@ -9,6 +9,7 @@ import {
   runOpsChecks,
   withCorrelation,
 } from "@startup-logistica/shared/ops";
+import { bootstrapDatabase } from "@startup-logistica/shared/db";
 import { pool } from "../db.js";
 import { agenciaPorApiKey } from "../auth-agencia.js";
 
@@ -39,6 +40,7 @@ export async function requireOpsAuth(
 
 export async function registerOps(app: FastifyInstance) {
   initOps(pool);
+  await bootstrapDatabase(pool, { logger: (msg) => app.log.info(msg) });
   await applyOpsSchema(pool);
 
   app.addHook("onRequest", (request, reply, done) => {
