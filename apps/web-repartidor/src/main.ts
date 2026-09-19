@@ -28,12 +28,15 @@ function describeRealtime(raw: string): string {
       case "conectado":
         return `Conectado al canal (repartidor ${msg.repartidorId})`;
       case "cliente_respuesta": {
-        const accion = msg.accion === "confirm-presence" || msg.accion === "will_be_there"
-          ? "confirmó que estará presente"
-          : msg.accion === "reschedule" || msg.accion === "reschedule_requested"
-            ? "pidió reprogramar"
-            : String(msg.accion);
-        const ventana = msg.ventana_alternativa ? ` (ventana: ${msg.ventana_alternativa})` : "";
+        const accion =
+          msg.accion === "confirmado"
+            ? "confirmó que estará presente"
+            : msg.accion === "reprogramado"
+              ? "pidió reprogramar"
+              : String(msg.accion);
+        const ventana = msg.ventana_alternativa
+          ? ` (ventana: ${msg.ventana_alternativa})`
+          : "";
         return `📩 El cliente ${accion}${ventana} · parada ${msg.paradaId}`;
       }
       case "cliente_notificado": {
@@ -119,7 +122,10 @@ async function cargarRuta(id: string) {
   }
 
   ws?.close();
-  const wsUrl = api.replace("http", "ws") + `/ws/repartidor?id=${id}`;
+  // Los publicadores emiten a canal:repartidor:<uuid>, así que el WS debe
+  // registrarse con el UUID del repartidor (no con el código introducido).
+  const wsRepartidorId = data.repartidor_id ?? id;
+  const wsUrl = api.replace("http", "ws") + `/ws/repartidor?id=${wsRepartidorId}`;
   ws = new WebSocket(wsUrl);
   ws.onopen = () => setWsStatus(true);
   ws.onclose = () => setWsStatus(false);
