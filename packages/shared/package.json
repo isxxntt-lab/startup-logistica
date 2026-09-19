@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./dashboard": "./src/dashboard.ts",
     "./tracking": "./src/tracking.ts",
+    "./routing": "./src/routing.ts",
     "./ops": "./src/ops/index.ts"
   },
   "scripts": {

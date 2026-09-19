@@ -6,7 +6,15 @@ import {
 import { redis } from "./redis.js";
 
 export async function enqueue(stream: string, event: DomainEvent): Promise<string> {
-  return redis.xadd(stream, "*", ...Object.entries(serializeEvent(event)).flat());
+  const id = await redis.xadd(
+    stream,
+    "*",
+    ...Object.entries(serializeEvent(event)).flat(),
+  );
+  if (id === null) {
+    throw new Error(`No se pudo encolar el evento en ${stream}: XADD devolvió null`);
+  }
+  return id;
 }
 
 export async function enqueueNotification(
