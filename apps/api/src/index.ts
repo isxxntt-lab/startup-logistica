@@ -10,6 +10,7 @@ import { clienteRoutes } from "./routes/cliente.js";
 import { trackingRoutes } from "./routes/tracking.js";
 import { repartidorRoutes } from "./routes/repartidor.js";
 import { agenciaRoutes } from "./routes/agencia.js";
+import { routingRoutes } from "./routes/routing.js";
 import { opsRoutes, registerOps } from "./routes/ops.js";
 import { registerWs } from "./ws/gateway.js";
 
@@ -30,6 +31,7 @@ await app.register(clienteRoutes);
 await app.register(trackingRoutes);
 await app.register(repartidorRoutes);
 await app.register(agenciaRoutes);
+await app.register(routingRoutes);
 await app.register(opsRoutes);
 await registerWs(app);
 
