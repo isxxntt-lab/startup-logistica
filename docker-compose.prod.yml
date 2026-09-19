@@ -106,6 +106,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      # Los workers no exponen HTTP: validamos que el consumer llega a Redis.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const {Redis}=require('ioredis');const r=new Redis(process.env.REDIS_URL);const t=setTimeout(()=>process.exit(1),4000);r.ping().then(()=>{clearTimeout(t);r.quit();process.exit(0)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - internal
 
