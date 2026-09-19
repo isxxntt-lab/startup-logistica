@@ -1,0 +1,11 @@
+# Overlay solo para GitHub Actions. No altera Contabo ni el compose local.
+# Redis (y Postgres, si alguien lo añade) NO publican puertos al host.
+# El gateway sigue en GATEWAY_PORT (8080) para el smoke HTTP desde el runner.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+
+name: logiq
+
+services:
+  redis:
+    ports: !reset []

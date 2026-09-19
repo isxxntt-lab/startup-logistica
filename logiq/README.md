@@ -172,6 +172,53 @@ Pruebas del paquete compartido (Haversine + FSM + Bearer, sin Docker):
 cd packages/shared && npm install && npm test
 ```
 
+## CI (GitHub Actions)
+
+Workflow: [`.github/workflows/logiq.yml`](../.github/workflows/logiq.yml). Independiente del monorepo **pnpm** (`apps/*`): Logiq usa **npm** + `package-lock.json`. Path filter `logiq/**` (y el propio YAML): cambios solo en `apps/*` no disparan este CI. **Contabo prod no se modifica.**
+
+Nunca se commitea `.env` (está en `.gitignore`). El smoke prefiere **GitHub Actions repository secrets**; si Blue aún no los cargó, el job genera valores efímeros con `openssl rand` (solo ese run, sin logs ni artifacts).
+
+### Secretos (Blue)
+
+GitHub → **Settings → Secrets and variables → Actions → New repository secret**. Nombres exactos:
+
+| Secreto | Cómo generarlo | Uso en CI |
+|---|---|---|
+| `INTERNAL_SERVICE_TOKEN` | `openssl rand -hex 32` | Bearer del smoke, mismo contrato que Contabo (`Authorization: Bearer …`). |
+| `REDIS_PASSWORD` | `openssl rand -hex 24` | `requirepass` de Redis en compose. Redis **no** publica `6379` al host. |
+
+Valores **solo de CI**. No reutilices el token ni la password de Contabo producción. No los pegues en issues, README, logs ni artifacts. Actions los enmascara; el workflow además evita `cat .env`, no sube artifacts y no vuelca logs de Redis.
+
+Recomendado en repo (CI-only, no Contabo prod). Si faltan, el smoke sigue con secretos de job. `unit` y `docker-build` no los necesitan.
+
+### Jobs
+
+| Job | Rol | Qué valida |
+|---|---|---|
+| `unit` (Green) | build/test `logiq/` | `npm ci` + `typecheck` en shared y los tres servicios; `npm test` en shared (Haversine, FSM, Bearer). No hay ESLint: el “lint” es `tsc --noEmit`. |
+| `docker-build` (Green) | imágenes | `docker build` de orders/fleet/routing (**sin push**). |
+| `smoke` (Yellow) | compose + contrato HTTP | Overlay `docker-compose.ci.yml` (Redis/Postgres **sin** puertos al host). Health **200**, POST anónimo **401**, Bearer **201** (`scripts/smoke.sh`). |
+
+Triggers: `push` / `pull_request` a `main` con esos paths; `workflow_dispatch`.
+
+Re-ejecutar en local (secretos en `.env`, no en git):
+
+```bash
+cd logiq
+./scripts/ci-unit.sh
+
+docker build -f services/service-orders/Dockerfile -t logiq-service-orders:ci .
+docker build -f services/service-fleet/Dockerfile -t logiq-service-fleet:ci .
+docker build -f services/service-routing/Dockerfile -t logiq-service-routing:ci .
+
+cp .env.example .env
+# openssl rand -hex 32 → INTERNAL_SERVICE_TOKEN
+# openssl rand -hex 24 → REDIS_PASSWORD
+docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+BASE=http://127.0.0.1:8080 ./scripts/smoke.sh
+docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+```
+
 ## Caddy opcional (TLS)
 
 Este compose **no** incluye Caddy. Nginx en `8080` basta para el smoke. En un VPS (Contabo u otro) pon Caddy delante del gateway, o sustituye nginx y deja Redis + servicios en la red interna.
