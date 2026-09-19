@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./dashboard": "./src/dashboard.ts",
     "./tracking": "./src/tracking.ts",
-    "./ops": "./src/ops/index.ts"
+    "./ops": "./src/ops/index.ts",
+    "./db": "./src/db/index.ts"
   },
   "scripts": {
     "dev": "node -e \"process.exit(0)\"",

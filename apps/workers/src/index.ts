@@ -4,6 +4,7 @@ import {
   type DomainEvent,
 } from "@startup-logistica/shared";
 import { applyOpsSchema, initOps } from "@startup-logistica/shared/ops";
+import { bootstrapDatabase } from "@startup-logistica/shared/db";
 import { consumeStream } from "./consume.js";
 import { handleNotification } from "./consumers/notifications.js";
 import { handleWebhook } from "./consumers/webhooks.js";
@@ -12,6 +13,7 @@ import { handleRouteProgress } from "./consumers/route-progress.js";
 import { pool } from "./db.js";
 
 initOps(pool);
+await bootstrapDatabase(pool, { logger: (msg) => console.log(`[workers] ${msg}`) });
 await applyOpsSchema(pool);
 
 const consumerName = `worker-${process.pid}`;
