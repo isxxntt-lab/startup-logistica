@@ -176,7 +176,7 @@ cd packages/shared && npm install && npm test
 
 Workflow: [`.github/workflows/logiq.yml`](../.github/workflows/logiq.yml). Independiente del monorepo **pnpm** (`apps/*`): Logiq usa **npm** + `package-lock.json`. Path filter `logiq/**` (y el propio YAML): cambios solo en `apps/*` no disparan este CI. **Contabo prod no se modifica.**
 
-Nunca se commitea `.env` (está en `.gitignore`). Los secretos del smoke salen de **GitHub Actions repository secrets**, no de git ni de `openssl` en el job.
+Nunca se commitea `.env` (está en `.gitignore`). El smoke prefiere **GitHub Actions repository secrets**; si Blue aún no los cargó, el job genera valores efímeros con `openssl rand` (solo ese run, sin logs ni artifacts).
 
 ### Secretos (Blue)
 
@@ -189,7 +189,7 @@ GitHub → **Settings → Secrets and variables → Actions → New repository s
 
 Valores **solo de CI**. No reutilices el token ni la password de Contabo producción. No los pegues en issues, README, logs ni artifacts. Actions los enmascara; el workflow además evita `cat .env`, no sube artifacts y no vuelca logs de Redis.
 
-Sin esos dos secretos el job `smoke` falla con un mensaje para Blue; `unit` y `docker-build` no los necesitan.
+Recomendado en repo (CI-only, no Contabo prod). Si faltan, el smoke sigue con secretos de job. `unit` y `docker-build` no los necesitan.
 
 ### Jobs
 

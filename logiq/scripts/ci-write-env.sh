@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# Escribe logiq/.env desde INTERNAL_SERVICE_TOKEN y REDIS_PASSWORD del entorno
-# (secretos de GitHub Actions en CI). Nunca imprime valores. No commitear .env.
+# Escribe logiq/.env para el smoke. Prefiere secretos de Actions; si faltan,
+# genera valores efímeros de job con openssl. Nunca imprime valores. No commitear .env.
 set -euo pipefail
 set +x
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$ROOT/.env"
 
-if [ -z "${INTERNAL_SERVICE_TOKEN:-}" ] || [ -z "${REDIS_PASSWORD:-}" ]; then
-  echo "Faltan INTERNAL_SERVICE_TOKEN y/o REDIS_PASSWORD." >&2
-  echo "Blue: Settings → Secrets and variables → Actions. Ver logiq/README.md (CI)." >&2
-  exit 1
+if [ -z "${INTERNAL_SERVICE_TOKEN:-}" ]; then
+  INTERNAL_SERVICE_TOKEN="$(openssl rand -hex 32)"
+  echo "ok: INTERNAL_SERVICE_TOKEN efímero de job (Blue puede fijar secreto de repo)"
+else
+  echo "ok: INTERNAL_SERVICE_TOKEN desde secreto de repo"
+fi
+
+if [ -z "${REDIS_PASSWORD:-}" ]; then
+  REDIS_PASSWORD="$(openssl rand -hex 24)"
+  echo "ok: REDIS_PASSWORD efímero de job (Blue puede fijar secreto de repo)"
+else
+  echo "ok: REDIS_PASSWORD desde secreto de repo"
 fi
 
 umask 077
-# printf no hace echo del archivo. No usar set -x ni cat "$ENV_FILE".
 {
   printf 'REDIS_PASSWORD=%s\n' "$REDIS_PASSWORD"
   printf 'INTERNAL_SERVICE_TOKEN=%s\n' "$INTERNAL_SERVICE_TOKEN"
@@ -22,7 +29,6 @@ umask 077
   printf 'GATEWAY_PORT=%s\n' "${GATEWAY_PORT:-8080}"
 } > "$ENV_FILE"
 
-# Confirma que el archivo existe y no está vacío, sin leer secretos a stdout.
 python3 - "$ENV_FILE" <<'PY'
 import os, sys
 path = sys.argv[1]

@@ -80,24 +80,15 @@ jobs:
         shell: bash
     env:
       COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
-      INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
-      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       GATEWAY_PORT: "8080"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Comprobar secretos de repo (sin imprimir valores)
-        run: |
-          set +x
-          if [ -z "${INTERNAL_SERVICE_TOKEN}" ] || [ -z "${REDIS_PASSWORD}" ]; then
-            echo "Faltan secretos de Actions: INTERNAL_SERVICE_TOKEN y REDIS_PASSWORD." >&2
-            echo "Blue: GitHub → Settings → Secrets and variables → Actions. Guía en logiq/README.md (CI)." >&2
-            echo "Usa valores solo de CI; no reutilices el token de Contabo prod." >&2
-            exit 1
-          fi
-          echo "ok: secretos presentes (enmascarados por Actions)"
-
+      # Secretos de repo si existen; si no, openssl efímero en .env (nunca GITHUB_ENV ni logs).
       - name: Escribir .env de runner (gitignored, no se sube como artifact)
+        env:
+          INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         run: |
           set +x
           ./scripts/ci-write-env.sh
@@ -119,13 +110,17 @@ jobs:
         if: failure()
         run: |
           set +x
-          docker compose ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
-          docker compose logs --no-color --tail=80 gateway service-orders service-fleet service-routing \
-            | sed -E 's/(Bearer )[^[:space:]]+/\1***/Ig; s#(redis://:)[^@]+@#\1***@#g; s/(INTERNAL_SERVICE_TOKEN=)[^[:space:]]+/\1***/g; s/(REDIS_PASSWORD=)[^[:space:]]+/\1***/g; s/(REDISCLI_AUTH=)[^[:space:]]+/\1***/g'
+          if [ -f .env ]; then
+            docker compose ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}' || true
+            docker compose logs --no-color --tail=80 gateway service-orders service-fleet service-routing 2>/dev/null \
+              | sed -E 's/(Bearer )[^[:space:]]+/\1[redacted]/Ig; s#(redis://:)[^@]+@#\1[redacted]@#g; s/(INTERNAL_SERVICE_TOKEN=)[^[:space:]]+/\1[redacted]/g; s/(REDIS_PASSWORD=)[^[:space:]]+/\1[redacted]/g; s/(REDISCLI_AUTH=)[^[:space:]]+/\1[redacted]/g' || true
+          fi
 
       - name: Compose down (sin artifacts)
         if: always()
         run: |
           set +x
-          docker compose down -v --remove-orphans
+          if [ -f .env ]; then
+            docker compose down -v --remove-orphans || true
+          fi
           rm -f .env
