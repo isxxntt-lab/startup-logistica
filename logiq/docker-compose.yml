@@ -1,0 +1,175 @@
+# Last-mile Logiq. Redis y los tres microservicios NO publican puertos al host.
+# El gateway nginx sí (8080) para el smoke local. Caddy es opcional (ver README).
+#
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# Redes:
+#   edge — gateway (único con ports)
+#   app  — gateway ↔ servicios
+#   data — servicios ↔ Redis (el gateway no ve Redis)
+
+name: logiq
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in logiq/.env}
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+      ]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - data
+
+  service-orders:
+    build:
+      context: .
+      dockerfile: services/service-orders/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOME: /tmp
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in logiq/.env}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - app
+      - data
+
+  service-fleet:
+    build:
+      context: .
+      dockerfile: services/service-fleet/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "3001"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      HOME: /tmp
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in logiq/.env}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - app
+      - data
+
+  service-routing:
+    build:
+      context: .
+      dockerfile: services/service-routing/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "3002"
+    environment:
+      NODE_ENV: production
+      PORT: "3002"
+      HOME: /tmp
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in logiq/.env}
+      GEOFENCE_RADIUS_M: ${GEOFENCE_RADIUS_M:-500}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - app
+      - data
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8080}:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      service-orders:
+        condition: service_healthy
+      service-fleet:
+        condition: service_healthy
+      service-routing:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1/health >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 5s
+    networks:
+      - edge
+      - app
+
+volumes:
+  redisdata:
+
+networks:
+  edge:
+  app:
+  data:
