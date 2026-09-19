@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import {
+  createInternalAuthHook,
   keys,
   streams,
   type Courier,
@@ -10,6 +11,8 @@ import { config } from "./config.js";
 import { closeRedis, readJson, redis } from "./redis.js";
 
 const app = Fastify({ logger: true });
+
+app.addHook("onRequest", createInternalAuthHook(config.internalServiceToken));
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/haversine.test.ts src/status.test.ts"
+    "test": "tsx --test src/haversine.test.ts src/status.test.ts src/auth.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

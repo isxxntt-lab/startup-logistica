@@ -1,5 +1,7 @@
+import { requireInternalServiceToken } from "@logiq/shared";
+
 function required(name: string): string {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(`Falta la variable de entorno ${name}`);
   }
@@ -10,4 +12,5 @@ export const config = {
   port: Number(process.env.PORT ?? 3000),
   redisUrl: required("REDIS_URL"),
   serviceName: "orders",
+  internalServiceToken: requireInternalServiceToken(),
 };

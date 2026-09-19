@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import {
   canTransition,
+  createInternalAuthHook,
   keys,
   streams,
   type Courier,
@@ -14,6 +15,8 @@ import { consumeLocationStream, ingestLocation } from "./geofence.js";
 import { closeRedis, readJson, redis } from "./redis.js";
 
 const app = Fastify({ logger: true });
+
+app.addHook("onRequest", createInternalAuthHook(config.internalServiceToken));
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;

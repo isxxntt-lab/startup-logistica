@@ -40,6 +40,8 @@ services:
       context: .
       dockerfile: services/service-orders/Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env
     expose:
       - "3000"
     environment:
@@ -47,6 +49,7 @@ services:
       PORT: "3000"
       HOME: /tmp
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in logiq/.env}
     depends_on:
       redis:
         condition: service_healthy
@@ -71,6 +74,8 @@ services:
       context: .
       dockerfile: services/service-fleet/Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env
     expose:
       - "3001"
     environment:
@@ -78,6 +83,7 @@ services:
       PORT: "3001"
       HOME: /tmp
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in logiq/.env}
     depends_on:
       redis:
         condition: service_healthy
@@ -102,6 +108,8 @@ services:
       context: .
       dockerfile: services/service-routing/Dockerfile
     restart: unless-stopped
+    env_file:
+      - .env
     expose:
       - "3002"
     environment:
@@ -109,6 +117,7 @@ services:
       PORT: "3002"
       HOME: /tmp
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN in logiq/.env}
       GEOFENCE_RADIUS_M: ${GEOFENCE_RADIUS_M:-500}
     depends_on:
       redis:
