@@ -174,19 +174,34 @@ cd packages/shared && npm install && npm test
 
 ## CI (GitHub Actions)
 
-Workflow: [`.github/workflows/logiq.yml`](../.github/workflows/logiq.yml). Independiente del monorepo **pnpm** (`apps/*`): Logiq usa **npm** + `package-lock.json`. No hay secretos de repo; el job genera `INTERNAL_SERVICE_TOKEN` y `REDIS_PASSWORD` con `openssl rand` a partir de `.env.example` (nunca se commitea `.env`).
+Workflow: [`.github/workflows/logiq.yml`](../.github/workflows/logiq.yml). Independiente del monorepo **pnpm** (`apps/*`): Logiq usa **npm** + `package-lock.json`. Path filter `logiq/**` (y el propio YAML): cambios solo en `apps/*` no disparan este CI. **Contabo prod no se modifica.**
 
-**Triggers:** `push` y `pull_request` a `main` si cambia `logiq/**` o el propio workflow; también `workflow_dispatch`. Cambios solo en `apps/*` no disparan este CI.
+Nunca se commitea `.env` (está en `.gitignore`). Los secretos del smoke salen de **GitHub Actions repository secrets**, no de git ni de `openssl` en el job.
 
-| Job | Qué hace |
-|---|---|
-| `unit` | `npm ci` + `typecheck` en `packages/shared` y los tres servicios; `npm test` en shared (Haversine, FSM, Bearer). No hay ESLint en Logiq: el “lint” es `tsc --noEmit`. Los servicios no tienen script `test`. |
-| `docker-build` | `docker build` de las tres imágenes (matriz, **sin push** a registry). Caza roturas de Dockerfile / `npm ci`. |
-| `smoke` | Tras unit + imágenes: compose con Redis + gateway; `scripts/smoke.sh` (health público, POST anónimo → 401, Bearer → 201, geocerca). Corre en `ubuntu-latest` con Docker del runner. |
+### Secretos (Blue)
 
-Si el smoke de compose se vuelve inestable en runners de GitHub, se puede marcar el job como opcional y dejar verdes `unit` + `docker-build`.
+GitHub → **Settings → Secrets and variables → Actions → New repository secret**. Nombres exactos:
 
-Re-ejecutar en local (mismo criterio que Actions):
+| Secreto | Cómo generarlo | Uso en CI |
+|---|---|---|
+| `INTERNAL_SERVICE_TOKEN` | `openssl rand -hex 32` | Bearer del smoke, mismo contrato que Contabo (`Authorization: Bearer …`). |
+| `REDIS_PASSWORD` | `openssl rand -hex 24` | `requirepass` de Redis en compose. Redis **no** publica `6379` al host. |
+
+Valores **solo de CI**. No reutilices el token ni la password de Contabo producción. No los pegues en issues, README, logs ni artifacts. Actions los enmascara; el workflow además evita `cat .env`, no sube artifacts y no vuelca logs de Redis.
+
+Sin esos dos secretos el job `smoke` falla con un mensaje para Blue; `unit` y `docker-build` no los necesitan.
+
+### Jobs
+
+| Job | Rol | Qué valida |
+|---|---|---|
+| `unit` (Green) | build/test `logiq/` | `npm ci` + `typecheck` en shared y los tres servicios; `npm test` en shared (Haversine, FSM, Bearer). No hay ESLint: el “lint” es `tsc --noEmit`. |
+| `docker-build` (Green) | imágenes | `docker build` de orders/fleet/routing (**sin push**). |
+| `smoke` (Yellow) | compose + contrato HTTP | Overlay `docker-compose.ci.yml` (Redis/Postgres **sin** puertos al host). Health **200**, POST anónimo **401**, Bearer **201** (`scripts/smoke.sh`). |
+
+Triggers: `push` / `pull_request` a `main` con esos paths; `workflow_dispatch`.
+
+Re-ejecutar en local (secretos en `.env`, no en git):
 
 ```bash
 cd logiq
@@ -197,11 +212,11 @@ docker build -f services/service-fleet/Dockerfile -t logiq-service-fleet:ci .
 docker build -f services/service-routing/Dockerfile -t logiq-service-routing:ci .
 
 cp .env.example .env
-# OPENSSL: openssl rand -hex 32 → INTERNAL_SERVICE_TOKEN
-#          openssl rand -hex 24 → REDIS_PASSWORD
-docker compose up -d --build --wait
+# openssl rand -hex 32 → INTERNAL_SERVICE_TOKEN
+# openssl rand -hex 24 → REDIS_PASSWORD
+docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
 BASE=http://127.0.0.1:8080 ./scripts/smoke.sh
-docker compose down -v
+docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 ```
 
 ## Caddy opcional (TLS)

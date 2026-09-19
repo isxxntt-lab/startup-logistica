@@ -1,5 +1,5 @@
 # CI del stack LogiQ (npm, independiente del workspace pnpm de apps/*).
-# No usa secretos del repo: el job genera INTERNAL_SERVICE_TOKEN y REDIS_PASSWORD.
+# Contabo prod no se toca. Secretos solo desde GitHub Actions (nunca en git ni logs).
 name: LogiQ CI
 
 on:
@@ -77,35 +77,55 @@ jobs:
     defaults:
       run:
         working-directory: logiq
+        shell: bash
+    env:
+      COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+      INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
+      REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+      GATEWAY_PORT: "8080"
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generar secretos de job desde .env.example
+      - name: Comprobar secretos de repo (sin imprimir valores)
         run: |
-          set -euo pipefail
-          TOKEN="$(openssl rand -hex 32)"
-          REDIS_PASSWORD="$(openssl rand -hex 24)"
-          sed \
-            -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=${REDIS_PASSWORD}/" \
-            -e "s/^INTERNAL_SERVICE_TOKEN=.*/INTERNAL_SERVICE_TOKEN=${TOKEN}/" \
-            .env.example > .env
-          # No volcar .env. Solo claves no secretas para depurar interpolación.
-          grep -E '^(GEOFENCE_RADIUS_M|GATEWAY_PORT)=' .env
-          test -n "$(grep -E '^INTERNAL_SERVICE_TOKEN=[0-9a-f]{64}$' .env)"
-          test -n "$(grep -E '^REDIS_PASSWORD=[0-9a-f]{48}$' .env)"
+          set +x
+          if [ -z "${INTERNAL_SERVICE_TOKEN}" ] || [ -z "${REDIS_PASSWORD}" ]; then
+            echo "Faltan secretos de Actions: INTERNAL_SERVICE_TOKEN y REDIS_PASSWORD." >&2
+            echo "Blue: GitHub → Settings → Secrets and variables → Actions. Guía en logiq/README.md (CI)." >&2
+            echo "Usa valores solo de CI; no reutilices el token de Contabo prod." >&2
+            exit 1
+          fi
+          echo "ok: secretos presentes (enmascarados por Actions)"
 
-      - name: Compose up (Redis + servicios + gateway)
-        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Escribir .env de runner (gitignored, no se sube como artifact)
+        run: |
+          set +x
+          ./scripts/ci-write-env.sh
 
-      - name: Smoke (health público, POST anónimo 401, Bearer 201, geocerca)
-        run: BASE=http://127.0.0.1:8080 ./scripts/smoke.sh
+      - name: Compose up (Redis interno, sin puertos de DB al host)
+        run: |
+          set +x
+          docker compose up -d --build --wait --wait-timeout 180
 
-      - name: Logs de compose si falla
+      - name: Redis/Postgres no publican puertos al host
+        run: ./scripts/ci-assert-no-db-host-ports.sh
+
+      - name: Smoke (health 200, POST anónimo 401, Bearer Contabo 201)
+        run: |
+          set +x
+          BASE=http://127.0.0.1:8080 ./scripts/smoke.sh
+
+      - name: Estado de compose si falla (sin Redis logs ni .env)
         if: failure()
         run: |
-          docker compose ps -a
-          docker compose logs --no-color --tail=200
+          set +x
+          docker compose ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
+          docker compose logs --no-color --tail=80 gateway service-orders service-fleet service-routing \
+            | sed -E 's/(Bearer )[^[:space:]]+/\1***/Ig; s#(redis://:)[^@]+@#\1***@#g; s/(INTERNAL_SERVICE_TOKEN=)[^[:space:]]+/\1***/g; s/(REDIS_PASSWORD=)[^[:space:]]+/\1***/g; s/(REDISCLI_AUTH=)[^[:space:]]+/\1***/g'
 
-      - name: Compose down
+      - name: Compose down (sin artifacts)
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: |
+          set +x
+          docker compose down -v --remove-orphans
+          rm -f .env

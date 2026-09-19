@@ -4,6 +4,7 @@
 #   set -a && source .env && set +a
 #   BASE=http://localhost:8080 ./scripts/smoke.sh
 set -euo pipefail
+set +x
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -z "${INTERNAL_SERVICE_TOKEN:-}" ] && [ -f "$ROOT/.env" ]; then
@@ -11,6 +12,7 @@ if [ -z "${INTERNAL_SERVICE_TOKEN:-}" ] && [ -f "$ROOT/.env" ]; then
   # shellcheck disable=SC1091
   source "$ROOT/.env"
   set +a
+  set +x
 fi
 
 : "${INTERNAL_SERVICE_TOKEN:?Set INTERNAL_SERVICE_TOKEN (openssl rand -hex 32)}"
@@ -44,13 +46,20 @@ expect_http() {
   fi
 }
 
-say "health Contabo /{servicio}/health (público, sin Bearer)"
-curl -fsS "$BASE/orders/health"
-echo
-curl -fsS "$BASE/fleet/health"
-echo
-curl -fsS "$BASE/routing/health"
-echo
+expect_health() {
+  local path="$1"
+  local slug="${path//\//_}"
+  local body="/tmp/logiq-health${slug}.json"
+  local code
+  code=$(curl -sS -o "$body" -w '%{http_code}' "$BASE$path")
+  echo "GET $path HTTP $code $(cat "$body")"
+  expect_http "$code" "200" "GET $path"
+}
+
+say "health Contabo /{servicio}/health (público, sin Bearer) → 200"
+expect_health "/orders/health"
+expect_health "/fleet/health"
+expect_health "/routing/health"
 
 say "POST /orders anónimo → 401"
 ANON_CODE=$(curl -sS -o /tmp/logiq-anon.json -w '%{http_code}' -X POST "$BASE/orders" \
