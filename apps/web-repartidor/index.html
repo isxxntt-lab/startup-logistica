@@ -9,18 +9,39 @@
       button, input { padding: 8px; margin: 4px 0; }
       li { margin: 8px 0; }
       #log { white-space: pre-wrap; background: #222; padding: 12px; min-height: 80px; }
+      .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
+      .badge-in { background: #14532d; color: #bbf7d0; }
+      .badge-out { background: #3f3f46; color: #d4d4d8; }
+      .prox { background: #1b1b1f; border: 1px solid #333; padding: 10px 12px; border-radius: 8px; }
+      .prox-dist { color: #93c5fd; font-variant-numeric: tabular-nums; }
+      .ws-status { font-size: 13px; }
+      .ws-on { color: #4ade80; } .ws-off { color: #f87171; }
+      section { margin-bottom: 20px; }
     </style>
   </head>
   <body>
     <h1>Ruta de hoy</h1>
-    <label>Repartidor ID
-      <input id="rid" value="22222222-2222-2222-2222-222222222222" size="40" />
+    <label>Repartidor ID o código
+      <input id="rid" value="repartidor_001" size="40" />
     </label>
     <button id="load">Cargar ruta</button>
     <button id="ping">Enviar GPS simulado (Madrid)</button>
-    <ul id="paradas"></ul>
-    <h2>Tiempo real</h2>
-    <div id="log"></div>
+
+    <section>
+      <h2>Paradas de la ruta</h2>
+      <ul id="paradas"></ul>
+    </section>
+
+    <section>
+      <h2>Próximas paradas (por proximidad · PostGIS)</h2>
+      <button id="refresh-prox">Actualizar proximidad</button>
+      <ul id="proximas"></ul>
+    </section>
+
+    <section>
+      <h2>Tiempo real <span id="ws-status" class="ws-status ws-off">● desconectado</span></h2>
+      <div id="log"></div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

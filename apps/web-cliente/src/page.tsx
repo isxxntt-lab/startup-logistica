@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { ActionPanel } from "./components/ActionPanel";
+import { CourierDistance } from "./components/CourierDistance";
 import { StatusBanner } from "./components/StatusBanner";
 import { TokenErrorView } from "./components/TokenErrorView";
 import { TrackingShell } from "./components/TrackingShell";
@@ -36,6 +37,7 @@ export function TrackingPage() {
       <Suspense fallback={<div id="mapa" className="mapa-loading" />}>
         <TrackingMap delivery={session.delivery} courier={position} />
       </Suspense>
+      <CourierDistance delivery={session.delivery} courier={position} />
       {actions.showBanner ? <StatusBanner ui={actions.ui} /> : null}
       {actions.showActions ? (
         <ActionPanel

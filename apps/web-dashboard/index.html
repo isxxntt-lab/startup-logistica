@@ -10,10 +10,29 @@
       <header>
         <p class="eyebrow">Agencia Demo Madrid</p>
         <h1>KPIs anti-entregas fallidas</h1>
-        <label>API key <input id="key" value="demo-api-key" /></label>
-        <button id="reload">Actualizar</button>
+      <label>API key <input id="key" value="demo-api-key" /></label>
+      <button id="reload">Actualizar</button>
+      <label class="auto"><input type="checkbox" id="auto" checked /> Auto-refresh (10s)</label>
       </header>
       <section id="kpis" class="grid"></section>
+
+      <section class="tool">
+        <h2>Optimizar ruta (PostGIS · vecino más cercano)</h2>
+        <label>Ruta ID <input id="ruta-id" value="44444444-4444-4444-4444-444444444444" size="40" /></label>
+        <label class="auto"><input type="checkbox" id="persistir" /> Persistir orden</label>
+        <button id="optimizar">Optimizar</button>
+        <div id="opt-result" class="opt-result"></div>
+      </section>
+
+      <section class="tool">
+        <h2>Repartidores cercanos</h2>
+        <label>lat <input id="near-lat" value="40.4168" size="10" /></label>
+        <label>lon <input id="near-lon" value="-3.7038" size="10" /></label>
+        <label>radio (m) <input id="near-radius" value="5000" size="8" /></label>
+        <button id="buscar-cercanos">Buscar</button>
+        <ul id="cercanos"></ul>
+      </section>
+
       <h2>En geocerca ahora</h2>
       <ul id="live"></ul>
       <h2>Entregas recientes</h2>
