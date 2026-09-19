@@ -6,10 +6,10 @@ RUN addgroup -g 10001 -S app \
 WORKDIR /app
 
 COPY packages/shared ./packages/shared
-COPY services/service-orders/package.json ./services/service-orders/package.json
+COPY services/service-orders/package.json services/service-orders/package-lock.json ./services/service-orders/
 
 WORKDIR /app/services/service-orders
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY services/service-orders ./
 

@@ -1,14 +1,16 @@
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { config } from "./config.js";
 
 export const redis = new Redis(config.redisUrl, {
   maxRetriesPerRequest: 3,
+  connectTimeout: 3000,
   lazyConnect: false,
 });
 
 /** Conexión aparte: XREADGROUP BLOCK no puede compartir el cliente HTTP. */
 export const redisConsumer = new Redis(config.redisUrl, {
   maxRetriesPerRequest: null,
+  connectTimeout: 3000,
   lazyConnect: false,
 });
 

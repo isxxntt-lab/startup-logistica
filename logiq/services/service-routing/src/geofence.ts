@@ -220,27 +220,30 @@ export async function consumeLocationStream(log: {
 
   while (true) {
     try {
-      const batch = await redisConsumer.xreadgroup(
+      const batch = (await redisConsumer.call(
+        "XREADGROUP",
         "GROUP",
         consumerGroups.routingLocations,
         config.consumerName,
-        "BLOCK",
-        2000,
         "COUNT",
-        20,
+        "20",
+        "BLOCK",
+        "2000",
         "STREAMS",
         streams.locations,
         ">",
-      );
+      )) as Array<[string, Array<[string, string[]]>]> | null;
 
       if (!batch) continue;
 
-      for (const [, entries] of batch) {
+      for (const stream of batch) {
+        const entries = stream[1];
         for (const [id, fields] of entries) {
-          const raw = fields[1];
+          const payloadIdx = fields.indexOf("payload");
+          const raw = payloadIdx >= 0 ? fields[payloadIdx + 1] : fields[1];
           let payload: unknown = null;
           try {
-            payload = JSON.parse(raw);
+            payload = JSON.parse(raw ?? "");
           } catch {
             payload = null;
           }

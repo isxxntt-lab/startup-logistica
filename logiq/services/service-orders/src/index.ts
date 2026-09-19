@@ -14,7 +14,7 @@ import { closeRedis, readJson, redis } from "./redis.js";
 
 const app = Fastify({ logger: true });
 
-app.setErrorHandler((err, _req, reply) => {
+app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
   reply.code(status).send({
     error: status >= 500 ? "internal_error" : err.message,

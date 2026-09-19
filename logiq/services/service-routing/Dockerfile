@@ -6,10 +6,10 @@ RUN addgroup -g 10001 -S app \
 WORKDIR /app
 
 COPY packages/shared ./packages/shared
-COPY services/service-routing/package.json ./services/service-routing/package.json
+COPY services/service-routing/package.json services/service-routing/package-lock.json ./services/service-routing/
 
 WORKDIR /app/services/service-routing
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
 COPY services/service-routing ./
 
