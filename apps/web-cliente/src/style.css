@@ -40,6 +40,18 @@ h1 {
 .muted {
   color: #5b6b7c;
 }
+.courier-distance {
+  margin: 10px 0 0;
+  font-size: 0.95rem;
+  color: #234;
+}
+.courier-distance strong {
+  color: #0a7c53;
+}
+.courier-distance-time {
+  color: #5b6b7c;
+  font-size: 0.82rem;
+}
 #mapa,
 .mapa-loading {
   height: 280px;
