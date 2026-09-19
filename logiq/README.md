@@ -172,6 +172,38 @@ Pruebas del paquete compartido (Haversine + FSM + Bearer, sin Docker):
 cd packages/shared && npm install && npm test
 ```
 
+## CI (GitHub Actions)
+
+Workflow: [`.github/workflows/logiq.yml`](../.github/workflows/logiq.yml). Independiente del monorepo **pnpm** (`apps/*`): Logiq usa **npm** + `package-lock.json`. No hay secretos de repo; el job genera `INTERNAL_SERVICE_TOKEN` y `REDIS_PASSWORD` con `openssl rand` a partir de `.env.example` (nunca se commitea `.env`).
+
+**Triggers:** `push` y `pull_request` a `main` si cambia `logiq/**` o el propio workflow; también `workflow_dispatch`. Cambios solo en `apps/*` no disparan este CI.
+
+| Job | Qué hace |
+|---|---|
+| `unit` | `npm ci` + `typecheck` en `packages/shared` y los tres servicios; `npm test` en shared (Haversine, FSM, Bearer). No hay ESLint en Logiq: el “lint” es `tsc --noEmit`. Los servicios no tienen script `test`. |
+| `docker-build` | `docker build` de las tres imágenes (matriz, **sin push** a registry). Caza roturas de Dockerfile / `npm ci`. |
+| `smoke` | Tras unit + imágenes: compose con Redis + gateway; `scripts/smoke.sh` (health público, POST anónimo → 401, Bearer → 201, geocerca). Corre en `ubuntu-latest` con Docker del runner. |
+
+Si el smoke de compose se vuelve inestable en runners de GitHub, se puede marcar el job como opcional y dejar verdes `unit` + `docker-build`.
+
+Re-ejecutar en local (mismo criterio que Actions):
+
+```bash
+cd logiq
+./scripts/ci-unit.sh
+
+docker build -f services/service-orders/Dockerfile -t logiq-service-orders:ci .
+docker build -f services/service-fleet/Dockerfile -t logiq-service-fleet:ci .
+docker build -f services/service-routing/Dockerfile -t logiq-service-routing:ci .
+
+cp .env.example .env
+# OPENSSL: openssl rand -hex 32 → INTERNAL_SERVICE_TOKEN
+#          openssl rand -hex 24 → REDIS_PASSWORD
+docker compose up -d --build --wait
+BASE=http://127.0.0.1:8080 ./scripts/smoke.sh
+docker compose down -v
+```
+
 ## Caddy opcional (TLS)
 
 Este compose **no** incluye Caddy. Nginx en `8080` basta para el smoke. En un VPS (Contabo u otro) pon Caddy delante del gateway, o sustituye nginx y deja Redis + servicios en la red interna.

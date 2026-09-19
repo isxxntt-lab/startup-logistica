@@ -1,0 +1,111 @@
+# CI del stack LogiQ (npm, independiente del workspace pnpm de apps/*).
+# No usa secretos del repo: el job genera INTERNAL_SERVICE_TOKEN y REDIS_PASSWORD.
+name: LogiQ CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "logiq/**"
+      - ".github/workflows/logiq.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "logiq/**"
+      - ".github/workflows/logiq.yml"
+
+concurrency:
+  group: logiq-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  unit:
+    name: Typecheck and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            logiq/packages/shared/package-lock.json
+            logiq/services/service-orders/package-lock.json
+            logiq/services/service-fleet/package-lock.json
+            logiq/services/service-routing/package-lock.json
+
+      - name: Shared tests + typecheck de servicios
+        working-directory: logiq
+        run: ./scripts/ci-unit.sh
+
+  docker-build:
+    name: Docker build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - service-orders
+          - service-fleet
+          - service-routing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image (sin push)
+        working-directory: logiq
+        run: >
+          docker build
+          -f "services/${{ matrix.service }}/Dockerfile"
+          -t "logiq-${{ matrix.service }}:ci"
+          .
+
+  smoke:
+    name: Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [unit, docker-build]
+    defaults:
+      run:
+        working-directory: logiq
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generar secretos de job desde .env.example
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -hex 32)"
+          REDIS_PASSWORD="$(openssl rand -hex 24)"
+          sed \
+            -e "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=${REDIS_PASSWORD}/" \
+            -e "s/^INTERNAL_SERVICE_TOKEN=.*/INTERNAL_SERVICE_TOKEN=${TOKEN}/" \
+            .env.example > .env
+          # No volcar .env. Solo claves no secretas para depurar interpolación.
+          grep -E '^(GEOFENCE_RADIUS_M|GATEWAY_PORT)=' .env
+          test -n "$(grep -E '^INTERNAL_SERVICE_TOKEN=[0-9a-f]{64}$' .env)"
+          test -n "$(grep -E '^REDIS_PASSWORD=[0-9a-f]{48}$' .env)"
+
+      - name: Compose up (Redis + servicios + gateway)
+        run: docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Smoke (health público, POST anónimo 401, Bearer 201, geocerca)
+        run: BASE=http://127.0.0.1:8080 ./scripts/smoke.sh
+
+      - name: Logs de compose si falla
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail=200
+
+      - name: Compose down
+        if: always()
+        run: docker compose down -v --remove-orphans
